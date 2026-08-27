@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.3</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.4</div>
     </div>
   </header>
 
@@ -1276,9 +1276,17 @@ if(window.pdfjsLib){
 
 function parsearTextoDocumento(texto){
   const datos = {};
-  const mDoc = texto.match(/\b([A-Z]{1,4}\d{0,4}-\d{3,9})\b/);
+
+  // N° Documento: prioridad a lo que aparece cerca de "FACTURA"/"BOLETA" (evita confundir con codigos de local/direccion)
+  const zonaFactura = texto.match(/(?:FACTURA|BOLETA)[^A-Z0-9]{0,20}(ELECTR[OÓ]NICA)?([\s\S]{0,60})/i);
+  let mDoc = null;
+  if(zonaFactura) mDoc = zonaFactura[2].match(/\b([A-Z]{1,4}\d{0,4}-\d{3,9})\b/);
+  if(!mDoc) mDoc = texto.match(/\b([A-Z]{1,4}\d{0,4}-\d{3,9})\b/);
   if(mDoc) datos.documento = mDoc[1];
-  const mFecha = texto.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
+
+  // Fecha: prioridad a lo que aparece cerca de "FECHA" (evita confundir con codigos/direcciones)
+  const zonaFecha = texto.match(/FECHA[^0-9]{0,25}(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/i);
+  const mFecha = zonaFecha ? zonaFecha : texto.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
   if(mFecha){
     let [_, d, m, y] = mFecha;
     if(y.length===2) y = '20'+y;
@@ -1296,6 +1304,15 @@ function parsearTextoDocumento(texto){
   else if(montosSoles.length) datos.precio = Math.max(...montosSoles);
   else if(cualquierMonto.length) datos.precio = Math.max(...cualquierMonto);
 
+  // Descripcion: nombres de productos, detectados como texto que precede a un patron "Cant Precio Descuento Total"
+  const itemsRegex = /([A-ZÁÉÍÓÚÑ0-9°º\.\-\/\s]{4,55}?)\s+\d{1,3}\s+[\d,]+\.\d{2}\s+[\d,]+\.\d{2}\s+[\d,]+\.\d{2}/g;
+  const items = [...texto.matchAll(itemsRegex)]
+    .map(m=>m[1].replace(/\s+/g,' ').trim())
+    .map(s=>s.replace(/^.*?(?:DE)?SCRIPCI[OÓ]N\s*/i, '')) // quita restos del encabezado de tabla (completo o cortado)
+    .map(s=>s.replace(/^\d{5,}\s*/, ''))          // quita codigos de barra al inicio
+    .filter(s=>s.length>=4 && /[A-ZÁÉÍÓÚÑ]{3,}/.test(s));
+  if(items.length) datos.descripcion = items.slice(0,4).join(', ');
+
   datos._textoLeido = texto.replace(/\s+/g,' ').trim().slice(0, 400);
   return datos;
 }
@@ -1304,6 +1321,7 @@ function aplicarDatosLeidos(datos){
   if(datos.fecha) document.getElementById('fFecha').value = datos.fecha;
   if(datos.documento) document.getElementById('fDocumento').value = datos.documento;
   if(datos.precio) document.getElementById('fPrecio').value = datos.precio;
+  if(datos.descripcion) document.getElementById('fDescripcion').value = datos.descripcion;
   recalcularFactura();
 }
 
@@ -1329,7 +1347,7 @@ document.getElementById('fArchivoLector').addEventListener('change', async (e)=>
     }
     const datos = parsearTextoDocumento(texto);
     aplicarDatosLeidos(datos);
-    const encontrados = ['fecha','documento','precio'].filter(k=>datos[k]).length;
+    const encontrados = ['fecha','documento','precio','descripcion'].filter(k=>datos[k]).length;
     estado.innerHTML = (encontrados>0
       ? `Se pre-llenaron ${encontrados} campo(s). Revisa y corrige antes de agregar.`
       : 'No se reconoci\u00f3 informaci\u00f3n \u00fatil. Completa el formulario manualmente.') +
@@ -1384,7 +1402,7 @@ document.getElementById('btnRecibirCelular').addEventListener('click', async ()=
     if(doc.tipo === 'factura'){
       irAModo('factura');
       aplicarDatosLeidos(datos);
-      mensajeResultado = `Factura recibida. Se pre-llenaron ${['fecha','documento','precio'].filter(k=>datos[k]).length} campo(s) en el formulario de Factura.`;
+      mensajeResultado = `Factura recibida. Se pre-llenaron ${['fecha','documento','precio','descripcion'].filter(k=>datos[k]).length} campo(s) en el formulario de Factura.`;
 
     } else if(doc.tipo === 'voucher_movilidad'){
       irAModo('movilidad');
