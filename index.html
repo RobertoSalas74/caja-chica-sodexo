@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.7</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.8</div>
     </div>
   </header>
 
@@ -413,8 +413,23 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       <span>Registros de esta sesi&oacute;n</span>
       <span class="count-tag" id="countTag">0 registros</span>
     </h2>
+    <div class="actions" style="margin-top:0; margin-bottom:14px;">
+      <button class="secondary" id="btnVerReclasificacion" style="padding:8px 14px; font-size:11px;">&#128065; Ver Reclasificaci&oacute;n</button>
+      <button class="secondary" id="btnVerMovilidad" style="padding:8px 14px; font-size:11px;">&#128065; Ver Movilidad</button>
+      <button class="secondary" id="btnVerArqueo" style="padding:8px 14px; font-size:11px;">&#128065; Ver Arqueo</button>
+    </div>
     <div id="tableWrap">
       <div class="empty-state">A&uacute;n no has agregado ning&uacute;n gasto. Complet&aacute; el formulario de arriba.</div>
+    </div>
+  </div>
+
+  <div id="modalVistaPrevia" style="display:none; position:fixed; inset:0; background:rgba(28,43,58,.7); z-index:1000; padding:20px; overflow:auto;">
+    <div style="background:#fff; max-width:1100px; margin:0 auto; border-radius:6px; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:var(--ink); color:#fff;">
+        <span id="modalTitulo" style="font-family:var(--mono); font-size:13px; text-transform:uppercase; letter-spacing:.05em;">Vista previa</span>
+        <button id="btnCerrarModal" style="background:none; border:1px solid #fff; color:#fff; padding:4px 12px; border-radius:3px; cursor:pointer; font-family:var(--mono); font-size:11px;">Cerrar &times;</button>
+      </div>
+      <div id="modalContenido" style="padding:0; overflow-x:auto;"></div>
     </div>
   </div>
 
@@ -1589,6 +1604,139 @@ recalcularFactura();
     });
   } catch(e){ /* si falla, simplemente se sigue con las 11 firmas base */ }
 })();
+
+// ── Vistas previas (Reclasificacion / Movilidad / Arqueo) con el formato visual real ──
+const modalVistaPrevia = document.getElementById('modalVistaPrevia');
+const modalTitulo = document.getElementById('modalTitulo');
+const modalContenido = document.getElementById('modalContenido');
+
+function abrirModal(titulo, html){
+  modalTitulo.textContent = titulo;
+  modalContenido.innerHTML = html;
+  modalVistaPrevia.style.display = 'block';
+}
+document.getElementById('btnCerrarModal').addEventListener('click', ()=> modalVistaPrevia.style.display='none');
+modalVistaPrevia.addEventListener('click', (e)=>{ if(e.target===modalVistaPrevia) modalVistaPrevia.style.display='none'; });
+
+const estiloTH = 'background:#7030A0; color:#fff; font-family:Arial; font-size:11px; padding:8px 6px; text-align:center; border:1px solid #999;';
+const estiloTD = 'font-family:Arial; font-size:11px; padding:6px; border:1px solid #ddd; white-space:nowrap;';
+
+document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
+  const numCajaResumen = cajaActiva || (ultimaCajaCerrada ? parseInt(ultimaCajaCerrada)+1 : '');
+  const sumaGastoAfecto   = registrosMov.filter(r=>r.tipo==='Gasto Sodexo').reduce((s,r)=>s+r.afecto,0);
+  const sumaGastoInafecto = registrosMov.filter(r=>r.tipo==='Gasto Sodexo').reduce((s,r)=>s+r.inafecto,0);
+  const sumaRefAfecto     = registrosMov.filter(r=>r.tipo==='Refacturable').reduce((s,r)=>s+r.afecto,0);
+  const sumaRefInafecto   = registrosMov.filter(r=>r.tipo==='Refacturable').reduce((s,r)=>s+r.inafecto,0);
+  const filasResumen = [
+    ['PLANILLA GASTO AFECTO', sumaGastoAfecto, 'Gasto Sodexo'],
+    ['PLANILLA GASTO INAFECTO', sumaGastoInafecto, 'Gasto Sodexo'],
+    ['PLANNILLA REF AFECTO', sumaRefAfecto, 'Refacturable'],
+    ['PLANNILLA REF INAFECTO', sumaRefInafecto, 'Refacturable']
+  ];
+  const headers = ['#Caja','Site','Fecha','Solicitante','N&deg; Doc','Descripci&oacute;n','Unidad','Cant','Precio','Sin IGV','Total','Tipo Gasto'];
+  let filas = filasResumen.map(([desc,monto,tipo])=>`
+    <tr>
+      <td style="${estiloTD}">${numCajaResumen}</td><td style="${estiloTD}">SANTA CLARA</td><td style="${estiloTD}"></td>
+      <td style="${estiloTD}"></td><td style="${estiloTD}"></td><td style="${estiloTD}">${desc}</td>
+      <td style="${estiloTD}">SOLES</td><td style="${estiloTD}">1</td><td style="${estiloTD}">${monto.toFixed(2)}</td>
+      <td style="${estiloTD}">${(monto/1.18).toFixed(2)}</td><td style="${estiloTD}">${monto.toFixed(2)}</td><td style="${estiloTD}">${tipo}</td>
+    </tr>`).join('');
+  filas += registros.map(r=>`
+    <tr>
+      <td style="${estiloTD}">${r.caja}</td><td style="${estiloTD}">${r.site}</td><td style="${estiloTD}">${r.fecha}</td>
+      <td style="${estiloTD}">${r.solicitante}</td><td style="${estiloTD}">${r.documento||''}</td><td style="${estiloTD}">${r.descripcion}</td>
+      <td style="${estiloTD}">${r.unidad}</td><td style="${estiloTD}">${r.cantidad}</td><td style="${estiloTD}">${r.precio.toFixed(2)}</td>
+      <td style="${estiloTD}">${r.sinIgv.toFixed(2)}</td><td style="${estiloTD}">${r.total.toFixed(2)}</td><td style="${estiloTD}">${r.tipo}</td>
+    </tr>`).join('');
+  const html = `
+    <div style="padding:16px 20px 0;"><b style="font-family:Arial;">SODEXO PERU SAC</b><br><span style="font-family:Arial; font-size:12px;">RUC 20414766308</span>
+    <div style="font-family:Arial; font-weight:bold; margin-top:8px; font-size:14px;">PLANILLA DE RECLASIFICACION DE CAJA CHICA</div></div>
+    <table style="border-collapse:collapse; width:100%; margin-top:10px;">
+      <thead><tr>${headers.map(h=>`<th style="${estiloTH}">${h}</th>`).join('')}</tr></thead>
+      <tbody>${filas || `<tr><td colspan="12" style="${estiloTD}text-align:center;">Sin registros todav&iacute;a</td></tr>`}</tbody>
+    </table>`;
+  abrirModal('Vista previa — Reclasificaci\u00f3n', html);
+});
+
+document.getElementById('btnVerMovilidad').addEventListener('click', ()=>{
+  const filasHtml = (lista, tituloTipo) => {
+    if(lista.length===0) return '';
+    const filas = lista.map(r=>`
+      <tr>
+        <td style="${estiloTD}">${r.fecha}</td><td style="${estiloTD}">${r.dni}</td><td style="${estiloTD}">${r.solicitante}</td>
+        <td style="${estiloTD}">${r.descripcion}</td><td style="${estiloTD}">${r.origenDestino}</td>
+        <td style="${estiloTD}">S/ ${r.afecto.toFixed(2)}</td><td style="${estiloTD}">S/ ${r.inafecto.toFixed(2)}</td>
+        <td style="${estiloTD}">S/ ${r.total.toFixed(2)}</td>
+      </tr>`).join('');
+    return `<div style="font-family:Arial; font-weight:bold; padding:10px 6px 4px;">${tituloTipo}</div>
+    <table style="border-collapse:collapse; width:100%;">
+      <thead><tr>
+        <th style="${estiloTH}">Fecha</th><th style="${estiloTH}">DNI</th><th style="${estiloTH}">Nombre</th>
+        <th style="${estiloTH}">Concepto</th><th style="${estiloTH}">Origen-Destino</th>
+        <th style="${estiloTH}">Afecto</th><th style="${estiloTH}">Inafecto</th><th style="${estiloTH}">Total</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>`;
+  };
+  const gasto = registrosMov.filter(r=>r.tipo==='Gasto Sodexo');
+  const refact = registrosMov.filter(r=>r.tipo==='Refacturable');
+  const html = `
+    <div style="padding:16px 20px 0; text-align:center;">
+      <img src="data:image/png;base64,${LOGO_SODEXO_B64}" style="height:30px;"><br>
+      <b style="font-family:Arial; font-size:15px;">PLANILLA DE MOVILIDAD</b>
+    </div>
+    ${filasHtml(gasto, 'Hoja: Gasto') || ''}
+    ${filasHtml(refact, 'Hoja: Refact') || ''}
+    ${registrosMov.length===0 ? '<div style="padding:20px; text-align:center; font-family:Arial;">Sin vales de movilidad todav\u00eda</div>' : ''}
+  `;
+  abrirModal('Vista previa — Planilla de Movilidad', html);
+});
+
+document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
+  const numCaja = cajaActiva || (ultimaCajaCerrada ? parseInt(ultimaCajaCerrada)+1 : '');
+  const totalComprobantes = registros.reduce((s,r)=>s+r.total,0);
+  const totalVales = registrosMov.reduce((s,r)=>s+r.total,0);
+  const totalPendientes = cajasCerradas.reduce((s,c)=>s+c.monto,0);
+  const fondoFijo = 8000;
+  const importeTotal = totalComprobantes + totalVales + totalPendientes;
+  const diferencia = importeTotal - fondoFijo;
+  const filaComprobantes = registros.map(r=>`<tr><td style="${estiloTD}">${r.fecha}</td><td style="${estiloTD}">${r.descripcion}</td><td style="${estiloTD}">${r.documento||''}</td><td style="${estiloTD}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
+  const filaVales = registrosMov.map(r=>`<tr><td style="${estiloTD}">${r.fecha}</td><td style="${estiloTD}">${r.solicitante}</td><td style="${estiloTD}">${r.descripcion}</td><td style="${estiloTD}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
+  const filaPendientes = cajasCerradas.map(c=>`<tr><td style="${estiloTD}">${c.fecha}</td><td style="${estiloTD}">CAJA N&deg; ${c.numero}</td><td style="${estiloTD}">S/ ${c.monto.toFixed(2)}</td></tr>`).join('');
+  const html = `
+    <div style="padding:16px 20px 0;">
+      <img src="data:image/png;base64,${LOGO_SODEXO_B64}" style="height:30px;"><br>
+      <b style="font-family:Arial; font-size:15px;">ARQUEO DE CAJA ${numCaja}- FM</b><br>
+      <span style="font-family:Arial; font-size:11px;">Contrato: KIMBERLY CLARK SANTA CLARA</span>
+    </div>
+    <div style="padding:12px 20px;">
+      <b style="font-family:Arial; font-size:12px;">2.- COMPROBANTES DE PAGO</b>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
+        <thead><tr><th style="${estiloTH}">Fecha</th><th style="${estiloTH}">Concepto</th><th style="${estiloTH}">N&deg; Doc</th><th style="${estiloTH}">Importe</th></tr></thead>
+        <tbody>${filaComprobantes || `<tr><td colspan="4" style="${estiloTD}text-align:center;">Sin comprobantes</td></tr>`}</tbody>
+        <tfoot><tr><td colspan="3" style="${estiloTD}font-weight:bold;">TOTAL</td><td style="${estiloTD}font-weight:bold;">S/ ${totalComprobantes.toFixed(2)}</td></tr></tfoot>
+      </table>
+      <b style="font-family:Arial; font-size:12px;">3.- VALES PROVISIONALES</b>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
+        <thead><tr><th style="${estiloTH}">Fecha</th><th style="${estiloTH}">Beneficiario</th><th style="${estiloTH}">Motivo</th><th style="${estiloTH}">Importe</th></tr></thead>
+        <tbody>${filaVales || `<tr><td colspan="4" style="${estiloTD}text-align:center;">Sin vales</td></tr>`}</tbody>
+        <tfoot><tr><td colspan="3" style="${estiloTD}font-weight:bold;">TOTAL</td><td style="${estiloTD}font-weight:bold;">S/ ${totalVales.toFixed(2)}</td></tr></tfoot>
+      </table>
+      <b style="font-family:Arial; font-size:12px;">4.- CAJAS PENDIENTES DE REPOSICION</b>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:14px;">
+        <thead><tr><th style="${estiloTH}">Fecha</th><th style="${estiloTH}">Denominaci&oacute;n</th><th style="${estiloTH}">Importe</th></tr></thead>
+        <tbody>${filaPendientes || `<tr><td colspan="3" style="${estiloTD}text-align:center;">Sin cajas pendientes</td></tr>`}</tbody>
+        <tfoot><tr><td colspan="2" style="${estiloTD}font-weight:bold;">TOTAL</td><td style="${estiloTD}font-weight:bold;">S/ ${totalPendientes.toFixed(2)}</td></tr></tfoot>
+      </table>
+      <table style="border-collapse:collapse; width:60%; font-family:Arial; font-size:12px;">
+        <tr><td style="${estiloTD}font-weight:bold;">FONDO FIJO ASIGNADO</td><td style="${estiloTD}">S/ ${fondoFijo.toFixed(2)}</td></tr>
+        <tr><td style="${estiloTD}font-weight:bold;">IMPORTE TOTAL CAJA (1+2+3+4)</td><td style="${estiloTD}">S/ ${importeTotal.toFixed(2)}</td></tr>
+        <tr><td style="${estiloTD}font-weight:bold;">DIFERENCIA</td><td style="${estiloTD}color:${Math.abs(diferencia)<0.01?'green':'red'};">S/ ${diferencia.toFixed(2)}</td></tr>
+      </table>
+      <p style="font-family:Arial; font-size:10px; color:#888;">Nota: Efectivo/Banco no se incluye aqu&iacute; (Banco en Vivo es una herramienta aparte, no alimenta el Excel).</p>
+    </div>`;
+  abrirModal('Vista previa — Arqueo de Caja', html);
+});
 </script>
 </body>
 </html>
