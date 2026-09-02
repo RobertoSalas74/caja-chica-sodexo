@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.9</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.0</div>
     </div>
   </header>
 
@@ -793,8 +793,10 @@ document.getElementById('btnAgregarFactura').addEventListener('click', ()=>{
   const total = cantidad*precio;
   registros.push({
     caja, site:'SANTA CLARA', fecha, solicitante, documento, descripcion, detalle,
-    unidad:'SOLES', cantidad, precio, sinIgv: total/1.18, total, tipo, cuenta, serviceCat
+    unidad:'SOLES', cantidad, precio, sinIgv: total/1.18, total, tipo, cuenta, serviceCat,
+    evidencia: evidenciaFacturaActual
   });
+  evidenciaFacturaActual = null;
   renderTabla();
   limpiarFormularioFactura();
   guardarEnArchivoConectado();
@@ -851,7 +853,8 @@ document.getElementById('btnAgregarMovilidad').addEventListener('click', ()=>{
   // Si subiste una foto de vale, se guarda junto al registro (tiene prioridad sobre la firma guardada)
   const fotoManual = fotoValeBase64 ? { firma: fotoValeBase64, fw: fotoValeDims.w, fh: fotoValeDims.h } : null;
 
-  registrosMov.push({ fecha, dni, solicitante, tipo, descripcion, origenDestino, total, afecto, inafecto, fotoManual });
+  registrosMov.push({ fecha, dni, solicitante, tipo, descripcion, origenDestino, total, afecto, inafecto, fotoManual, evidencia: evidenciaMovilidadActual });
+  evidenciaMovilidadActual = null;
   renderTabla();
   limpiarFormularioMovilidad();
   guardarEnArchivoConectado();
@@ -893,7 +896,7 @@ function renderTabla(){
       <td>${r.descripcion}</td>
       <td class="small">${r.cuenta}</td>
       <td class="num">${fmt(r.total)}</td>
-      <td><button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
+      <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
     </tr>
   `).join('');
 
@@ -905,7 +908,7 @@ function renderTabla(){
       <td>${r.descripcion}</td>
       <td class="small">${r.origenDestino}</td>
       <td class="num">${fmt(r.total)}</td>
-      <td><button class="del-btn" onclick="eliminarRegistro('movilidad',${i})">Eliminar</button></td>
+      <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" onclick="eliminarRegistro('movilidad',${i})">Eliminar</button></td>
     </tr>
   `).join('');
 
@@ -924,6 +927,16 @@ function eliminarRegistro(modo, i){
   if(modo==='factura') registros.splice(i,1); else registrosMov.splice(i,1);
   renderTabla();
   guardarEnArchivoConectado();
+}
+
+function verEvidencia(modo, i){
+  const r = modo==='factura' ? registros[i] : registrosMov[i];
+  if(!r || !r.evidencia) return;
+  const esPdf = (r.evidencia.tipo||'').includes('pdf');
+  const html = esPdf
+    ? `<iframe src="${r.evidencia.dataUrl}" style="width:100%; height:75vh; border:none;"></iframe>`
+    : `<div style="padding:16px; text-align:center;"><img src="${r.evidencia.dataUrl}" style="max-width:100%; max-height:80vh;"></div>`;
+  abrirModal('Documento adjunto — ' + (r.descripcion||r.solicitante||''), html);
 }
 
 document.getElementById('btnVaciar').addEventListener('click', ()=>{
@@ -1446,11 +1459,22 @@ async function leerDocumentoConIA(file){
   };
 }
 
+let evidenciaFacturaActual = null; // dataURL de la foto/PDF cargado, para "Ver documento" despues
+let evidenciaMovilidadActual = null;
+
 document.getElementById('fArchivoLector').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   const estado = document.getElementById('fLectorEstado');
   if(!file) return;
   estado.textContent = 'Leyendo documento con IA, un momento...';
+
+  // Guardar la evidencia (foto/PDF) para poder verla despues junto al registro
+  evidenciaFacturaActual = await new Promise((resolve)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>resolve({dataUrl: reader.result, tipo: file.type});
+    reader.onerror = ()=>resolve(null);
+    reader.readAsDataURL(file);
+  });
 
   try{
     let datos;
@@ -1548,12 +1572,14 @@ document.getElementById('btnRecibirCelular').addEventListener('click', async ()=
     if(doc.tipo === 'factura'){
       irAModo('factura');
       aplicarDatosLeidos(datos);
+      evidenciaFacturaActual = { dataUrl: 'data:' + doc.tipo_archivo + ';base64,' + doc.data_base64, tipo: doc.tipo_archivo };
       mensajeResultado = `Factura recibida. Se pre-llenaron ${['fecha','documento','precio','descripcion'].filter(k=>datos[k]).length} campo(s) en el formulario de Factura.`;
 
     } else if(doc.tipo === 'voucher_movilidad'){
       irAModo('movilidad');
       if(datos.fecha) document.getElementById('mFecha').value = datos.fecha;
       if(datos.precio) { document.getElementById('mMonto').value = datos.precio; actualizarAfectoMov(); }
+      evidenciaMovilidadActual = { dataUrl: 'data:' + doc.tipo_archivo + ';base64,' + doc.data_base64, tipo: doc.tipo_archivo };
       mensajeResultado = `Voucher de Movilidad recibido. Revisa y completa Nombre, Origen-Destino y Tipo antes de agregar.`;
 
     } else if(doc.tipo === 'voucher_banco'){
