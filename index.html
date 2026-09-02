@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.4</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.5</div>
     </div>
   </header>
 
@@ -199,34 +199,55 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   </div>
 
   <div class="panel" id="panelEfectivo" style="display:none;">
-    <h2>Efectivo y Banco &mdash; para el Arqueo <button class="secondary" id="btnCambiarModo3" style="float:right; padding:4px 10px;">&larr; Cambiar</button></h2>
+    <h2>Banco en Vivo &mdash; solo para visualizar <button class="secondary" id="btnCambiarModo3" style="float:right; padding:4px 10px;">&larr; Cambiar</button></h2>
     <p style="font-size:13px; margin:0 0 12px; color:#6b6255;">
-      Cuenta el efectivo f&iacute;sico en caja e ingresa el saldo bancario. Esto alimenta la Secci&oacute;n 1
-      del Arqueo al descargar el Excel.
+      No maneja efectivo. Ingresa el saldo inicial y registra ingresos/egresos para ver el saldo real
+      al momento. <b>Esto NO alimenta Reclasificaci&oacute;n, Movilidad ni Arqueo</b> &mdash; es solo un
+      cuadre visual tuyo. Al cerrar la caja, puedes descargar este historial aparte.
     </p>
+
+    <div class="grid" style="margin-bottom:14px;">
+      <div class="span2">
+        <label>Saldo Inicial en Banco (S/)</label>
+        <input type="number" id="bancoSaldoInicial" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="span2" style="display:flex; align-items:flex-end;">
+        <button id="btnEstablecerSaldoInicial" style="width:100%;">Establecer saldo inicial</button>
+      </div>
+    </div>
+
+    <div style="background:var(--ok-soft); border:1px solid var(--ok); border-radius:4px; padding:14px; text-align:center; margin-bottom:16px;">
+      <div style="font-family:var(--mono); font-size:11px; text-transform:uppercase; color:#6b6255;">Saldo Real Actual</div>
+      <div id="bancoSaldoActual" style="font-size:28px; font-weight:bold; color:var(--ok);">S/ 0.00</div>
+    </div>
+
     <div class="grid">
-      <div><label>Billetes S/200</label><input type="number" id="efBillete200" value="0" min="0"></div>
-      <div><label>Billetes S/100</label><input type="number" id="efBillete100" value="0" min="0"></div>
-      <div><label>Billetes S/50</label><input type="number" id="efBillete50" value="0" min="0"></div>
-      <div><label>Billetes S/20</label><input type="number" id="efBillete20" value="0" min="0"></div>
-      <div><label>Billetes S/10</label><input type="number" id="efBillete10" value="0" min="0"></div>
-      <div></div>
-      <div><label>Monedas S/5</label><input type="number" id="efMoneda5" value="0" min="0"></div>
-      <div><label>Monedas S/2</label><input type="number" id="efMoneda2" value="0" min="0"></div>
-      <div><label>Monedas S/1</label><input type="number" id="efMoneda1" value="0" min="0"></div>
-      <div><label>Monedas S/0.50</label><input type="number" id="efMoneda050" value="0" min="0"></div>
-      <div><label>Monedas S/0.20</label><input type="number" id="efMoneda020" value="0" min="0"></div>
-      <div><label>Monedas S/0.10</label><input type="number" id="efMoneda010" value="0" min="0"></div>
-      <div><label>Monedas S/0.05</label><input type="number" id="efMoneda005" value="0" min="0"></div>
-      <div><label>Monedas S/0.01</label><input type="number" id="efMoneda001" value="0" min="0"></div>
-      <div class="span2"><label>Saldo en Banco (S/)</label><input type="number" id="efBanco" min="0" step="0.01" placeholder="0.00"></div>
+      <div>
+        <label>Fecha</label>
+        <input type="date" id="bancoMovFecha">
+      </div>
+      <div>
+        <label>Tipo</label>
+        <select id="bancoMovTipo">
+          <option value="egreso">Egreso (sale)</option>
+          <option value="ingreso">Ingreso (entra)</option>
+        </select>
+      </div>
+      <div class="span2">
+        <label>Descripci&oacute;n</label>
+        <input type="text" id="bancoMovDescripcion" placeholder="Ej. Transferencia a Mayra Peche">
+      </div>
+      <div>
+        <label>Monto (S/)</label>
+        <input type="number" id="bancoMovMonto" min="0" step="0.01" placeholder="0.00">
+      </div>
     </div>
     <div class="actions">
-      <button id="btnGuardarEfectivo">Guardar</button>
+      <button id="btnAgregarMovimientoBanco">Agregar movimiento</button>
+      <button class="secondary" id="btnDescargarHistorialBanco">Descargar historial (CSV)</button>
     </div>
-  </div>
 
-    </div>
+    <div id="listaMovimientosBanco" style="margin-top:16px;"></div>
   </div>
 
   <div class="panel" id="panelFactura" style="display:none;">
@@ -519,6 +540,9 @@ btnCerrarCaja.addEventListener('click', ()=>{
   const montoCierre = totalComprobantes + totalVales;
 
   if(confirm(`¿Confirmas que quieres cerrar la Caja ${cajaActiva}?\n\nMonto a reembolsar (Comprobantes + Vales): S/ ${montoCierre.toFixed(2)}\n\nEsto guardará el resumen y limpiará el detalle día a día. La próxima caja que abras sugerirá el número ${parseInt(cajaActiva)+1}.`)){
+    // Descargar el historial de Banco en Vivo de esta caja antes de limpiarlo (mientras cajaActiva aun tiene el numero correcto)
+    if(movimientosBanco.length>0 || saldoInicialBanco!==0) descargarHistorialBancoCSV();
+
     cajasCerradas.push({
       numero: cajaActiva,
       monto: montoCierre,
@@ -528,6 +552,9 @@ btnCerrarCaja.addEventListener('click', ()=>{
     cajaActiva = null;
     registros = [];       // el detalle desaparece al cerrar (solo queda el resumen)
     registrosMov = [];
+    saldoInicialBanco = 0;  // Banco en Vivo se reinicia para la proxima caja
+    movimientosBanco = [];
+    renderBancoEnVivo();
     renderTabla();
     actualizarBadgeCaja();
   }
@@ -631,32 +658,84 @@ document.getElementById('btnCambiarModo1').addEventListener('click', volverASele
 document.getElementById('btnCambiarModo2').addEventListener('click', volverASelector);
 document.getElementById('btnCambiarModo3').addEventListener('click', volverASelector);
 
-// ── Efectivo (para Arqueo) ──
-let efectivoData = {
+// ── Banco en Vivo: saldo inicial + movimientos, solo visual (NO alimenta ningun Excel oficial) ──
+let saldoInicialBanco = 0;
+let movimientosBanco = []; // {fecha, tipo:'ingreso'|'egreso', descripcion, monto}
+// efectivoData se mantiene solo para no romper la firma de la funcion del Arqueo (siempre en cero: no se maneja efectivo)
+const efectivoData = {
   b200:0,b100:0,b50:0,b20:0,b10:0,
   m5:0,m2:0,m1:0,m050:0,m020:0,m010:0,m005:0,m001:0,
   banco:0
 };
-document.getElementById('btnGuardarEfectivo').addEventListener('click', ()=>{
-  efectivoData = {
-    b200: parseInt(document.getElementById('efBillete200').value)||0,
-    b100: parseInt(document.getElementById('efBillete100').value)||0,
-    b50: parseInt(document.getElementById('efBillete50').value)||0,
-    b20: parseInt(document.getElementById('efBillete20').value)||0,
-    b10: parseInt(document.getElementById('efBillete10').value)||0,
-    m5: parseInt(document.getElementById('efMoneda5').value)||0,
-    m2: parseInt(document.getElementById('efMoneda2').value)||0,
-    m1: parseInt(document.getElementById('efMoneda1').value)||0,
-    m050: parseInt(document.getElementById('efMoneda050').value)||0,
-    m020: parseInt(document.getElementById('efMoneda020').value)||0,
-    m010: parseInt(document.getElementById('efMoneda010').value)||0,
-    m005: parseInt(document.getElementById('efMoneda005').value)||0,
-    m001: parseInt(document.getElementById('efMoneda001').value)||0,
-    banco: parseFloat(document.getElementById('efBanco').value)||0
-  };
-  volverASelector();
-  guardarEnArchivoConectado();
+
+function calcularSaldoActualBanco(){
+  const ingresos = movimientosBanco.filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+m.monto,0);
+  const egresos = movimientosBanco.filter(m=>m.tipo==='egreso').reduce((s,m)=>s+m.monto,0);
+  return saldoInicialBanco + ingresos - egresos;
+}
+
+function renderBancoEnVivo(){
+  document.getElementById('bancoSaldoActual').textContent = 'S/ ' + calcularSaldoActualBanco().toFixed(2);
+  const lista = document.getElementById('listaMovimientosBanco');
+  if(movimientosBanco.length===0){
+    lista.innerHTML = '<div class="empty-state">Sin movimientos registrados todav\u00eda.</div>';
+    return;
+  }
+  const filas = movimientosBanco.map((m,i)=>`
+    <tr>
+      <td class="small">${m.fecha}</td>
+      <td>${m.descripcion} ${m.tipo==='ingreso' ? '<span class="badge" style="background:var(--ok-soft); color:var(--ok);">Ingreso</span>' : '<span class="badge">Egreso</span>'}</td>
+      <td class="num">${m.tipo==='ingreso'?'+':'-'} S/ ${m.monto.toFixed(2)}</td>
+      <td><button class="del-btn" onclick="eliminarMovimientoBanco(${i})">Eliminar</button></td>
+    </tr>
+  `).join('');
+  lista.innerHTML = `<table><thead><tr><th>Fecha</th><th>Descripci\u00f3n</th><th>Monto</th><th></th></tr></thead><tbody>${filas}</tbody></table>`;
+}
+
+function eliminarMovimientoBanco(i){
+  movimientosBanco.splice(i,1);
+  renderBancoEnVivo();
+}
+
+document.getElementById('btnEstablecerSaldoInicial').addEventListener('click', ()=>{
+  saldoInicialBanco = parseFloat(document.getElementById('bancoSaldoInicial').value)||0;
+  renderBancoEnVivo();
 });
+
+document.getElementById('btnAgregarMovimientoBanco').addEventListener('click', ()=>{
+  const fecha = document.getElementById('bancoMovFecha').value;
+  const tipo = document.getElementById('bancoMovTipo').value;
+  const descripcion = document.getElementById('bancoMovDescripcion').value.trim();
+  const monto = parseFloat(document.getElementById('bancoMovMonto').value)||0;
+  if(!fecha || !descripcion || !monto) return;
+  movimientosBanco.push({fecha, tipo, descripcion, monto});
+  document.getElementById('bancoMovDescripcion').value='';
+  document.getElementById('bancoMovMonto').value='';
+  renderBancoEnVivo();
+});
+
+document.getElementById('btnDescargarHistorialBanco').addEventListener('click', ()=>{
+  descargarHistorialBancoCSV();
+});
+
+function descargarHistorialBancoCSV(){
+  if(movimientosBanco.length===0 && saldoInicialBanco===0) return;
+  let csv = 'Fecha,Tipo,Descripcion,Monto\n';
+  csv += `,,Saldo Inicial,${saldoInicialBanco.toFixed(2)}\n`;
+  movimientosBanco.forEach(m=>{
+    csv += `${m.fecha},${m.tipo},"${m.descripcion.replace(/"/g,'""')}",${m.monto.toFixed(2)}\n`;
+  });
+  csv += `,,Saldo Real Final,${calcularSaldoActualBanco().toFixed(2)}\n`;
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const numCaja = cajaActiva || (ultimaCajaCerrada ? parseInt(ultimaCajaCerrada)+1 : 'SinAbrir');
+  a.href = url; a.download = `Caja${numCaja}_HistorialBanco.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+renderBancoEnVivo();
 
 // ── Formulario FACTURA ──
 const fCantidad = document.getElementById('fCantidad');
@@ -1411,13 +1490,18 @@ document.getElementById('btnRecibirCelular').addEventListener('click', async ()=
       mensajeResultado = `Voucher de Movilidad recibido. Revisa y completa Nombre, Origen-Destino y Tipo antes de agregar.`;
 
     } else if(doc.tipo === 'voucher_banco'){
-      // Solo descuenta del saldo en banco mostrado, NO crea ningun registro
+      // Crea un Egreso en el historial de "Banco en Vivo" (ya no toca un numero suelto)
       if(datos.precio){
-        efectivoData.banco = Math.max(0, (efectivoData.banco||0) - datos.precio);
-        document.getElementById('efBanco').value = efectivoData.banco.toFixed(2);
-        mensajeResultado = `Voucher de Banco: se descontaron S/ ${datos.precio.toFixed(2)} del saldo en banco. Nuevo saldo: S/ ${efectivoData.banco.toFixed(2)}.`;
+        movimientosBanco.push({
+          fecha: datos.fecha || new Date().toISOString().slice(0,10),
+          tipo: 'egreso',
+          descripcion: 'Voucher de Banco (celular)' + (datos.documento ? ' - ' + datos.documento : ''),
+          monto: datos.precio
+        });
+        renderBancoEnVivo();
+        mensajeResultado = `Voucher de Banco: egreso de S/ ${datos.precio.toFixed(2)} agregado al historial. Saldo real actual: S/ ${calcularSaldoActualBanco().toFixed(2)}.`;
       } else {
-        mensajeResultado = 'Voucher de Banco recibido, pero no se pudo leer el monto. Ajusta el saldo manualmente en "Actualizar Efectivo/Banco".';
+        mensajeResultado = 'Voucher de Banco recibido, pero no se pudo leer el monto. Agr\u00e9galo manualmente en "Banco en Vivo".';
       }
     } else {
       mensajeResultado = `Documento de tipo "${doc.tipo}" recibido, pero no tiene una acci\u00f3n definida.`;
