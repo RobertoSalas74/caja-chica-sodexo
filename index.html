@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.5</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.6</div>
     </div>
   </header>
 
@@ -1404,33 +1404,67 @@ function aplicarDatosLeidos(datos){
   recalcularFactura();
 }
 
+// Lector con IA (via funcion segura de Supabase) — mucho mas preciso que el OCR por patrones
+async function leerDocumentoConIA(file){
+  const base64 = await new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const { data, error } = await supabaseClient.functions.invoke('leer-documento', {
+    body: { imageBase64: base64, mimeType: file.type || 'image/jpeg' }
+  });
+  if(error) throw error;
+  if(data.error) throw new Error(data.error);
+  return {
+    fecha: data.fecha || undefined,
+    documento: data.documento || undefined,
+    precio: (typeof data.precio === 'number') ? data.precio : undefined,
+    descripcion: data.descripcion || undefined
+  };
+}
+
 document.getElementById('fArchivoLector').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   const estado = document.getElementById('fLectorEstado');
   if(!file) return;
-  estado.textContent = 'Leyendo documento, un momento...';
+  estado.textContent = 'Leyendo documento con IA, un momento...';
 
   try{
-    let texto = '';
-    if(file.type === 'application/pdf'){
-      const buffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
-      for(let i=1; i<=pdf.numPages; i++){
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        texto += content.items.map(it=>it.str).join(' ') + ' ';
+    let datos;
+    try{
+      // Metodo principal: IA con vision (funciona con foto o PDF por igual si el navegador lo permite como imagen)
+      if(file.type === 'application/pdf'){
+        throw new Error('PDF: usando lector de texto directo');
       }
-    } else {
-      const { data: { text } } = await Tesseract.recognize(file, 'spa');
-      texto = text;
+      datos = await leerDocumentoConIA(file);
+      datos._metodo = 'IA';
+    } catch(errIA){
+      // Respaldo: PDF con texto real, o si la IA fallo, usar el lector por patrones (Tesseract/PDF.js)
+      let texto = '';
+      if(file.type === 'application/pdf'){
+        const buffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
+        for(let i=1; i<=pdf.numPages; i++){
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          texto += content.items.map(it=>it.str).join(' ') + ' ';
+        }
+      } else {
+        const { data: { text } } = await Tesseract.recognize(file, 'spa');
+        texto = text;
+      }
+      datos = parsearTextoDocumento(texto);
+      datos._metodo = 'respaldo (patrones de texto)';
     }
-    const datos = parsearTextoDocumento(texto);
+
     aplicarDatosLeidos(datos);
     const encontrados = ['fecha','documento','precio','descripcion'].filter(k=>datos[k]).length;
     estado.innerHTML = (encontrados>0
-      ? `Se pre-llenaron ${encontrados} campo(s). Revisa y corrige antes de agregar.`
-      : 'No se reconoci\u00f3 informaci\u00f3n \u00fatil. Completa el formulario manualmente.') +
-      `<br><span style="opacity:.7;">Texto le\u00eddo: "${(datos._textoLeido||'(vac\u00edo)').slice(0,200)}..."</span>`;
+      ? `Se pre-llenaron ${encontrados} campo(s) usando ${datos._metodo}. Revisa y corrige antes de agregar.`
+      : `No se reconoci\u00f3 informaci\u00f3n \u00fatil (m\u00e9todo: ${datos._metodo}). Completa el formulario manualmente.`) +
+      (datos._textoLeido ? `<br><span style="opacity:.7;">Texto le\u00eddo: "${datos._textoLeido.slice(0,200)}..."</span>` : '');
   } catch(err){
     estado.textContent = 'No se pudo leer el documento: ' + err.message;
   }
@@ -1461,20 +1495,27 @@ document.getElementById('btnRecibirCelular').addEventListener('click', async ()=
     for(let i=0;i<byteChars.length;i++) byteArray[i] = byteChars.charCodeAt(i);
     const blob = new Blob([byteArray], {type: doc.tipo_archivo});
 
-    let texto = '';
-    if(doc.tipo_archivo === 'application/pdf'){
-      const buffer = await blob.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
-      for(let i=1; i<=pdf.numPages; i++){
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        texto += content.items.map(it=>it.str).join(' ') + ' ';
+    let datos;
+    try{
+      if(doc.tipo_archivo === 'application/pdf') throw new Error('PDF: usando lector directo');
+      const blobFile = new File([blob], 'doc.jpg', {type: doc.tipo_archivo});
+      datos = await leerDocumentoConIA(blobFile);
+    } catch(errIA){
+      let texto = '';
+      if(doc.tipo_archivo === 'application/pdf'){
+        const buffer = await blob.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
+        for(let i=1; i<=pdf.numPages; i++){
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          texto += content.items.map(it=>it.str).join(' ') + ' ';
+        }
+      } else {
+        const { data: { text } } = await Tesseract.recognize(blob, 'spa');
+        texto = text;
       }
-    } else {
-      const { data: { text } } = await Tesseract.recognize(blob, 'spa');
-      texto = text;
+      datos = parsearTextoDocumento(texto);
     }
-    const datos = parsearTextoDocumento(texto);
 
     let mensajeResultado = '';
 
