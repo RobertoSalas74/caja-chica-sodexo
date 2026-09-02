@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.6</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 3.7</div>
     </div>
   </header>
 
@@ -1412,11 +1412,17 @@ async function leerDocumentoConIA(file){
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+  // Anthropic solo acepta estos 4 tipos exactos; normalizamos cualquier otra variante
+  const tiposValidos = ['image/jpeg','image/png','image/gif','image/webp'];
+  let mimeType = file.type || 'image/jpeg';
+  if(mimeType === 'image/jpg') mimeType = 'image/jpeg';
+  if(!tiposValidos.includes(mimeType)) mimeType = 'image/jpeg';
+
   const { data, error } = await supabaseClient.functions.invoke('leer-documento', {
-    body: { imageBase64: base64, mimeType: file.type || 'image/jpeg' }
+    body: { imageBase64: base64, mimeType }
   });
-  if(error) throw error;
-  if(data.error) throw new Error(data.error);
+  if(error) throw new Error(error.message || 'Error de conexi\u00f3n con la funci\u00f3n de IA: ' + JSON.stringify(error));
+  if(data && data.error) throw new Error(data.error);
   return {
     fecha: data.fecha || undefined,
     documento: data.documento || undefined,
@@ -1433,6 +1439,7 @@ document.getElementById('fArchivoLector').addEventListener('change', async (e)=>
 
   try{
     let datos;
+    let errorIAMostrar = '';
     try{
       // Metodo principal: IA con vision (funciona con foto o PDF por igual si el navegador lo permite como imagen)
       if(file.type === 'application/pdf'){
@@ -1441,6 +1448,7 @@ document.getElementById('fArchivoLector').addEventListener('change', async (e)=>
       datos = await leerDocumentoConIA(file);
       datos._metodo = 'IA';
     } catch(errIA){
+      errorIAMostrar = errIA.message || String(errIA);
       // Respaldo: PDF con texto real, o si la IA fallo, usar el lector por patrones (Tesseract/PDF.js)
       let texto = '';
       if(file.type === 'application/pdf'){
@@ -1464,6 +1472,7 @@ document.getElementById('fArchivoLector').addEventListener('change', async (e)=>
     estado.innerHTML = (encontrados>0
       ? `Se pre-llenaron ${encontrados} campo(s) usando ${datos._metodo}. Revisa y corrige antes de agregar.`
       : `No se reconoci\u00f3 informaci\u00f3n \u00fatil (m\u00e9todo: ${datos._metodo}). Completa el formulario manualmente.`) +
+      (errorIAMostrar ? `<br><span style="color:var(--accent);">\u26a0\ufe0f La IA fall\u00f3, se us\u00f3 el respaldo. Motivo: ${errorIAMostrar}</span>` : '') +
       (datos._textoLeido ? `<br><span style="opacity:.7;">Texto le\u00eddo: "${datos._textoLeido.slice(0,200)}..."</span>` : '');
   } catch(err){
     estado.textContent = 'No se pudo leer el documento: ' + err.message;
@@ -1496,11 +1505,13 @@ document.getElementById('btnRecibirCelular').addEventListener('click', async ()=
     const blob = new Blob([byteArray], {type: doc.tipo_archivo});
 
     let datos;
+    let errorIAMostrar2 = '';
     try{
       if(doc.tipo_archivo === 'application/pdf') throw new Error('PDF: usando lector directo');
       const blobFile = new File([blob], 'doc.jpg', {type: doc.tipo_archivo});
       datos = await leerDocumentoConIA(blobFile);
     } catch(errIA){
+      errorIAMostrar2 = errIA.message || String(errIA);
       let texto = '';
       if(doc.tipo_archivo === 'application/pdf'){
         const buffer = await blob.arrayBuffer();
@@ -1553,7 +1564,8 @@ document.getElementById('btnRecibirCelular').addEventListener('click', async ()=
 
     estado.innerHTML = mensajeResultado +
       (data.length>1 ? ` Quedan ${data.length-1} documento(s) m\u00e1s — presiona de nuevo para traer el siguiente.` : '') +
-      `<br><span style="opacity:.7;">Texto le\u00eddo: "${(datos._textoLeido||'(vac\u00edo, no se reconoci\u00f3 nada)').slice(0,250)}..."</span>`;
+      (errorIAMostrar2 ? `<br><span style="color:var(--accent);">\u26a0\ufe0f La IA fall\u00f3, se us\u00f3 el respaldo. Motivo: ${errorIAMostrar2}</span>` : '') +
+      (datos._textoLeido ? `<br><span style="opacity:.7;">Texto le\u00eddo: "${datos._textoLeido.slice(0,250)}..."</span>` : '');
   } catch(err){
     estado.textContent = 'Error al recibir del celular: ' + err.message;
   }
