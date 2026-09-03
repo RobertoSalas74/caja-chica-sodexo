@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.3</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.4</div>
     </div>
   </header>
 
@@ -195,6 +195,37 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     </div>
     <div class="actions" style="margin-top:8px;">
       <button id="btnModoEfectivo" class="secondary" style="flex:1; padding:12px;">&#128176; Actualizar Efectivo / Banco (para Arqueo)</button>
+      <button id="btnModoPersonas" class="secondary" style="flex:1; padding:12px;">&#128101; Administrar Personas</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panelPersonas" style="display:none;">
+    <h2>Administrar Personas <button class="secondary" id="btnCambiarModo4" style="float:right; padding:4px 10px;">&larr; Cambiar</button></h2>
+    <p style="font-size:13px; margin:0 0 14px; color:#6b6255;">
+      Edita el nombre, DNI o firma de cada persona. Los cambios se guardan de inmediato y quedan
+      disponibles la pr&oacute;xima vez que la uses en un Vale de Movilidad.
+    </p>
+    <div id="listaPersonasAdmin"></div>
+
+    <div style="margin-top:20px; padding-top:16px; border-top:1px dashed var(--line);">
+      <h2 style="border:none; margin-bottom:10px;">+ Agregar persona nueva</h2>
+      <div class="grid">
+        <div class="span2">
+          <label>Nombre completo</label>
+          <input type="text" id="nuevaPersonaNombre" placeholder="Ej. Juan Perez">
+        </div>
+        <div class="span2">
+          <label>DNI</label>
+          <input type="text" id="nuevaPersonaDni" placeholder="00000000">
+        </div>
+        <div class="span4">
+          <label>Foto de firma (opcional)</label>
+          <input type="file" id="nuevaPersonaFirma" accept="image/*">
+        </div>
+      </div>
+      <div class="actions">
+        <button id="btnAgregarPersona">Agregar persona</button>
+      </div>
     </div>
   </div>
 
@@ -667,19 +698,24 @@ function irAModo(modo){
   panelFactura.style.display = modo==='factura' ? 'block' : 'none';
   panelMovilidad.style.display = modo==='movilidad' ? 'block' : 'none';
   panelEfectivo.style.display = modo==='efectivo' ? 'block' : 'none';
+  document.getElementById('panelPersonas').style.display = modo==='personas' ? 'block' : 'none';
+  if(modo==='personas') renderPersonasAdmin();
 }
 function volverASelector(){
   panelSelector.style.display = 'block';
   panelFactura.style.display = 'none';
   panelMovilidad.style.display = 'none';
   panelEfectivo.style.display = 'none';
+  document.getElementById('panelPersonas').style.display = 'none';
 }
 document.getElementById('btnModoFactura').addEventListener('click', ()=>irAModo('factura'));
 document.getElementById('btnModoMovilidad').addEventListener('click', ()=>irAModo('movilidad'));
 document.getElementById('btnModoEfectivo').addEventListener('click', ()=>irAModo('efectivo'));
+document.getElementById('btnModoPersonas').addEventListener('click', ()=>irAModo('personas'));
 document.getElementById('btnCambiarModo1').addEventListener('click', volverASelector);
 document.getElementById('btnCambiarModo2').addEventListener('click', volverASelector);
 document.getElementById('btnCambiarModo3').addEventListener('click', volverASelector);
+document.getElementById('btnCambiarModo4').addEventListener('click', volverASelector);
 
 // ── Banco en Vivo: saldo inicial + movimientos, solo visual (NO alimenta ningun Excel oficial) ──
 let saldoInicialBanco = 0;
@@ -1832,6 +1868,117 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
       <p style="font-family:Arial; font-size:10px; color:#888; margin-top:10px;">Nota: la Secci&oacute;n 1 (Efectivo/Banco) no se llena aqu&iacute; porque "Banco en Vivo" es un panel aparte, solo visual. En el Excel real esa fila queda vac&iacute;a o la completas manualmente antes de imprimir.</p>
     </div>`;
   abrirModal('Vista previa — Arqueo de Caja', html);
+});
+
+// ── Administrar Personas (nombre, DNI, firma) ──
+function renderPersonasAdmin(){
+  const cont = document.getElementById('listaPersonasAdmin');
+  const nombres = Object.keys(PERSONAS_DATA).sort();
+  if(nombres.length===0){
+    cont.innerHTML = '<div class="empty-state">A\u00fan no hay personas registradas.</div>';
+    return;
+  }
+  cont.innerHTML = nombres.map(nombre=>{
+    const p = PERSONAS_DATA[nombre];
+    const firmaImg = p.firma ? `<img src="data:image/png;base64,${p.firma}" style="height:36px; background:#fff; border:1px solid var(--line); border-radius:2px; padding:2px;">` : '<span style="font-size:11px; color:#9a9280;">Sin firma</span>';
+    const idSafe = nombre.replace(/[^A-Za-z0-9]/g,'_');
+    return `
+      <div style="display:flex; align-items:center; gap:10px; padding:10px; border:1px solid var(--line); border-radius:4px; margin-bottom:8px; flex-wrap:wrap;">
+        <input type="text" id="pnombre_${idSafe}" value="${nombre}" style="flex:2; min-width:140px; padding:6px 8px; font-size:13px;">
+        <input type="text" id="pdni_${idSafe}" value="${p.dni||''}" placeholder="DNI" style="flex:1; min-width:100px; padding:6px 8px; font-size:13px;">
+        ${firmaImg}
+        <input type="file" id="pfirma_${idSafe}" accept="image/*" style="max-width:160px; font-size:11px;">
+        <button class="secondary" style="padding:6px 10px; font-size:11px;" onclick="guardarPersona('${nombre.replace(/'/g,"\\'")}','${idSafe}')">Guardar</button>
+        <button class="del-btn" onclick="eliminarPersona('${nombre.replace(/'/g,"\\'")}')">Eliminar</button>
+      </div>`;
+  }).join('');
+}
+
+async function guardarPersona(nombreOriginal, idSafe){
+  const nuevoNombre = document.getElementById(`pnombre_${idSafe}`).value.trim().toUpperCase();
+  const nuevoDni = document.getElementById(`pdni_${idSafe}`).value.trim();
+  const archivoFirma = document.getElementById(`pfirma_${idSafe}`).files[0];
+  if(!nuevoNombre) return;
+
+  let firmaBase64 = PERSONAS_DATA[nombreOriginal].firma;
+  let fw = PERSONAS_DATA[nombreOriginal].fw;
+  let fh = PERSONAS_DATA[nombreOriginal].fh;
+
+  if(archivoFirma){
+    firmaBase64 = await new Promise((resolve)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(archivoFirma);
+    });
+    const dims = await new Promise((resolve)=>{
+      const img = new Image();
+      img.onload = ()=>resolve({w:img.width,h:img.height});
+      img.src = 'data:image/png;base64,' + firmaBase64;
+    });
+    fw = dims.w; fh = dims.h;
+  }
+
+  try{
+    await supabaseClient.from('firmas_personas').upsert({ nombre: nuevoNombre, dni: nuevoDni, firma_base64: firmaBase64, fw, fh });
+    if(nuevoNombre !== nombreOriginal){
+      await supabaseClient.from('firmas_personas').delete().eq('nombre', nombreOriginal);
+      delete PERSONAS_DATA[nombreOriginal];
+      const idxS = SOLICITANTES.indexOf(nombreOriginal);
+      if(idxS>-1) SOLICITANTES.splice(idxS,1,nuevoNombre); else SOLICITANTES.push(nuevoNombre);
+    }
+    PERSONAS_DATA[nuevoNombre] = { dni: nuevoDni, firma: firmaBase64, fw, fh };
+    renderPersonasAdmin();
+    alert('Persona guardada correctamente.');
+  } catch(err){
+    alert('Error al guardar: ' + err.message);
+  }
+}
+
+async function eliminarPersona(nombre){
+  if(!confirm(`\u00bfEliminar a ${nombre}? Esto la quita de la base de datos permanente. Si es una de las personas originales, podr\u00eda volver a aparecer al recargar la p\u00e1gina (est\u00e1 tambi\u00e9n guardada en el c\u00f3digo base).`)) return;
+  try{
+    await supabaseClient.from('firmas_personas').delete().eq('nombre', nombre);
+    delete PERSONAS_DATA[nombre];
+    const idxS = SOLICITANTES.indexOf(nombre);
+    if(idxS>-1) SOLICITANTES.splice(idxS,1);
+    renderPersonasAdmin();
+  } catch(err){
+    alert('Error al eliminar: ' + err.message);
+  }
+}
+
+document.getElementById('btnAgregarPersona').addEventListener('click', async ()=>{
+  const nombre = document.getElementById('nuevaPersonaNombre').value.trim().toUpperCase();
+  const dni = document.getElementById('nuevaPersonaDni').value.trim();
+  const archivo = document.getElementById('nuevaPersonaFirma').files[0];
+  if(!nombre) return;
+
+  let firmaBase64 = null, fw = 0, fh = 0;
+  if(archivo){
+    firmaBase64 = await new Promise((resolve)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(archivo);
+    });
+    const dims = await new Promise((resolve)=>{
+      const img = new Image();
+      img.onload = ()=>resolve({w:img.width,h:img.height});
+      img.src = 'data:image/png;base64,' + firmaBase64;
+    });
+    fw = dims.w; fh = dims.h;
+  }
+
+  try{
+    await supabaseClient.from('firmas_personas').upsert({ nombre, dni, firma_base64: firmaBase64||'', fw, fh });
+    PERSONAS_DATA[nombre] = { dni, firma: firmaBase64, fw, fh };
+    if(!SOLICITANTES.includes(nombre)) SOLICITANTES.push(nombre);
+    document.getElementById('nuevaPersonaNombre').value='';
+    document.getElementById('nuevaPersonaDni').value='';
+    document.getElementById('nuevaPersonaFirma').value='';
+    renderPersonasAdmin();
+  } catch(err){
+    alert('Error al agregar: ' + err.message);
+  }
 });
 </script>
 </body>
