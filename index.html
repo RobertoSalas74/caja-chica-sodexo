@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.0</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.1</div>
     </div>
   </header>
 
@@ -350,6 +350,14 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   <div class="panel" id="panelMovilidad" style="display:none;">
     <h2>Nuevo registro &mdash; Vale de Movilidad <button class="secondary" id="btnCambiarModo2" style="float:right; padding:4px 10px;">&larr; Cambiar</button></h2>
+
+    <div style="background:var(--accent-soft); border:1px solid var(--accent); border-radius:3px; padding:12px; margin-bottom:14px;">
+      <div class="actions" style="margin-top:0;">
+        <button class="secondary" id="btnRecibirCelularMov" style="padding:8px 14px; font-size:11px;">&#128241; Recibir fotos del celular</button>
+      </div>
+      <div id="mLectorEstado" style="font-family:var(--mono); font-size:11px; margin-top:6px; color:#6b6255;"></div>
+    </div>
+
     <div class="grid">
       <div class="span2">
         <label for="mFecha">Fecha</label>
@@ -1519,8 +1527,8 @@ document.getElementById('fArchivoLector').addEventListener('change', async (e)=>
 });
 
 // ── Recibir fotos del celular (via puente temporal en Supabase) ──
-document.getElementById('btnRecibirCelular').addEventListener('click', async ()=>{
-  const estado = document.getElementById('fLectorEstado');
+async function recibirDocumentoCelular(estadoElId){
+  const estado = document.getElementById(estadoElId);
   estado.textContent = 'Buscando documentos enviados desde el celular...';
   try{
     const { data, error } = await supabaseClient
@@ -1610,7 +1618,10 @@ document.getElementById('btnRecibirCelular').addEventListener('click', async ()=
   } catch(err){
     estado.textContent = 'Error al recibir del celular: ' + err.message;
   }
-});
+}
+
+document.getElementById('btnRecibirCelular').addEventListener('click', ()=> recibirDocumentoCelular('fLectorEstado'));
+document.getElementById('btnRecibirCelularMov').addEventListener('click', ()=> recibirDocumentoCelular('mLectorEstado'));
 
 document.getElementById('logoSodexoHeader').src = 'data:image/png;base64,' + LOGO_SODEXO_B64;
 recalcularFactura();
