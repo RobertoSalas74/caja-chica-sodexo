@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.1</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.2</div>
     </div>
   </header>
 
@@ -1441,7 +1441,7 @@ function aplicarDatosLeidos(datos){
 }
 
 // Lector con IA (via funcion segura de Supabase) — mucho mas preciso que el OCR por patrones
-async function leerDocumentoConIA(file){
+async function leerDocumentoConIA(file, tipoDoc){
   const base64 = await new Promise((resolve,reject)=>{
     const reader = new FileReader();
     reader.onload = ()=>resolve(reader.result.split(',')[1]);
@@ -1455,7 +1455,7 @@ async function leerDocumentoConIA(file){
   if(!tiposValidos.includes(mimeType)) mimeType = 'image/jpeg';
 
   const { data, error } = await supabaseClient.functions.invoke('leer-documento', {
-    body: { imageBase64: base64, mimeType }
+    body: { imageBase64: base64, mimeType, tipoDoc: tipoDoc || 'factura' }
   });
   if(error) throw new Error(error.message || 'Error de conexi\u00f3n con la funci\u00f3n de IA: ' + JSON.stringify(error));
   if(data && data.error) throw new Error(data.error);
@@ -1463,7 +1463,11 @@ async function leerDocumentoConIA(file){
     fecha: data.fecha || undefined,
     documento: data.documento || undefined,
     precio: (typeof data.precio === 'number') ? data.precio : undefined,
-    descripcion: data.descripcion || undefined
+    descripcion: data.descripcion || undefined,
+    nombre: data.nombre || undefined,
+    dni: data.dni || undefined,
+    concepto: data.concepto || undefined,
+    origen_destino: data.origen_destino || undefined
   };
 }
 
@@ -1553,10 +1557,11 @@ async function recibirDocumentoCelular(estadoElId){
 
     let datos;
     let errorIAMostrar2 = '';
+    const tipoDocParaIA = doc.tipo === 'voucher_movilidad' ? 'movilidad' : 'factura';
     try{
       if(doc.tipo_archivo === 'application/pdf') throw new Error('PDF: usando lector directo');
       const blobFile = new File([blob], 'doc.jpg', {type: doc.tipo_archivo});
-      datos = await leerDocumentoConIA(blobFile);
+      datos = await leerDocumentoConIA(blobFile, tipoDocParaIA);
     } catch(errIA){
       errorIAMostrar2 = errIA.message || String(errIA);
       let texto = '';
@@ -1587,8 +1592,26 @@ async function recibirDocumentoCelular(estadoElId){
       irAModo('movilidad');
       if(datos.fecha) document.getElementById('mFecha').value = datos.fecha;
       if(datos.precio) { document.getElementById('mMonto').value = datos.precio; actualizarAfectoMov(); }
+      if(datos.concepto) document.getElementById('mConcepto').value = datos.concepto;
+      if(datos.origen_destino) document.getElementById('mOrigenDestino').value = datos.origen_destino;
+      // Nombre: si coincide con alguien de la lista lo selecciona, si no usa "+ Persona nueva"
+      if(datos.nombre){
+        const nombreMayus = datos.nombre.toUpperCase().trim();
+        const coincide = SOLICITANTES.find(n=>n===nombreMayus || nombreMayus.includes(n) || n.includes(nombreMayus));
+        const selectMov = document.getElementById('mSolicitante');
+        if(coincide){
+          selectMov.value = coincide;
+          selectMov.dispatchEvent(new Event('change'));
+        } else {
+          selectMov.value = '__nuevo__';
+          selectMov.dispatchEvent(new Event('change'));
+          document.getElementById('mSolicitanteNuevo').value = nombreMayus;
+        }
+      }
+      if(datos.dni && !document.getElementById('mDni').value) document.getElementById('mDni').value = datos.dni;
       evidenciaMovilidadActual = { dataUrl: 'data:' + doc.tipo_archivo + ';base64,' + doc.data_base64, tipo: doc.tipo_archivo };
-      mensajeResultado = `Voucher de Movilidad recibido. Revisa y completa Nombre, Origen-Destino y Tipo antes de agregar.`;
+      const camposLlenos = ['fecha','precio','concepto','origen_destino','nombre'].filter(k=>datos[k]).length;
+      mensajeResultado = `Voucher de Movilidad recibido. Se pre-llenaron ${camposLlenos} campo(s). Revisa antes de agregar (Tipo de gasto siempre debes elegirlo t\u00fa).`;
 
     } else if(doc.tipo === 'voucher_banco'){
       // Crea un Egreso en el historial de "Banco en Vivo" (ya no toca un numero suelto)
