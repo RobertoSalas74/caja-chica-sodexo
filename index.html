@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.4</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.5</div>
     </div>
   </header>
 
@@ -205,6 +205,9 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       Edita el nombre, DNI o firma de cada persona. Los cambios se guardan de inmediato y quedan
       disponibles la pr&oacute;xima vez que la uses en un Vale de Movilidad.
     </p>
+    <div class="actions" style="margin-top:0; margin-bottom:10px;">
+      <button class="secondary" id="btnActualizarPersonas" style="padding:8px 14px; font-size:11px;">&#128260; Actualizar lista (traer firmas nuevas del celular)</button>
+    </div>
     <div id="listaPersonasAdmin"></div>
 
     <div style="margin-top:20px; padding-top:16px; border-top:1px dashed var(--line);">
@@ -1693,7 +1696,7 @@ document.getElementById('logoSodexoHeader').src = 'data:image/png;base64,' + LOG
 recalcularFactura();
 
 // ── Cargar firmas permanentes guardadas desde el celular (se fusionan con las 11 base) ──
-(async function cargarFirmasPermanentes(){
+async function cargarFirmasPermanentes(){
   try{
     const { data, error } = await supabaseClient.from('firmas_personas').select('*');
     if(error || !data) return;
@@ -1705,8 +1708,17 @@ recalcularFactura();
         poblarSelect('mSolicitante', [f.nombre]);
       }
     });
-  } catch(e){ /* si falla, simplemente se sigue con las 11 firmas base */ }
-})();
+  } catch(e){ /* si falla, simplemente se sigue con las firmas ya cargadas */ }
+}
+cargarFirmasPermanentes();
+
+document.getElementById('btnActualizarPersonas').addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnActualizarPersonas');
+  btn.disabled = true; btn.textContent = 'Actualizando...';
+  await cargarFirmasPermanentes();
+  renderPersonasAdmin();
+  btn.disabled = false; btn.textContent = '\u{1F504} Actualizar lista (traer firmas nuevas del celular)';
+});
 
 // ── Vistas previas (Reclasificacion / Movilidad / Arqueo) con el formato visual real ──
 const modalVistaPrevia = document.getElementById('modalVistaPrevia');
