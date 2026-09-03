@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.2</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.3</div>
     </div>
   </header>
 
@@ -1594,24 +1594,31 @@ async function recibirDocumentoCelular(estadoElId){
       if(datos.precio) { document.getElementById('mMonto').value = datos.precio; actualizarAfectoMov(); }
       if(datos.concepto) document.getElementById('mConcepto').value = datos.concepto;
       if(datos.origen_destino) document.getElementById('mOrigenDestino').value = datos.origen_destino;
-      // Nombre: si coincide con alguien de la lista lo selecciona, si no usa "+ Persona nueva"
-      if(datos.nombre){
+      // Nombre: prioridad 1 = buscar por DNI exacto (mas confiable que letra manuscrita del nombre)
+      let nombreEncontrado = null;
+      if(datos.dni){
+        const dniLimpio = datos.dni.replace(/\D/g,'');
+        const entradaPorDni = Object.entries(PERSONAS_DATA).find(([nombre, info]) => (info.dni||'').replace(/\D/g,'') === dniLimpio);
+        if(entradaPorDni) nombreEncontrado = entradaPorDni[0];
+      }
+      // Prioridad 2: si no hubo match por DNI, intentar por el nombre leido
+      if(!nombreEncontrado && datos.nombre){
         const nombreMayus = datos.nombre.toUpperCase().trim();
-        const coincide = SOLICITANTES.find(n=>n===nombreMayus || nombreMayus.includes(n) || n.includes(nombreMayus));
-        const selectMov = document.getElementById('mSolicitante');
-        if(coincide){
-          selectMov.value = coincide;
-          selectMov.dispatchEvent(new Event('change'));
-        } else {
-          selectMov.value = '__nuevo__';
-          selectMov.dispatchEvent(new Event('change'));
-          document.getElementById('mSolicitanteNuevo').value = nombreMayus;
-        }
+        nombreEncontrado = SOLICITANTES.find(n=>n===nombreMayus || nombreMayus.includes(n) || n.includes(nombreMayus)) || null;
+      }
+      const selectMov = document.getElementById('mSolicitante');
+      if(nombreEncontrado){
+        selectMov.value = nombreEncontrado;
+        selectMov.dispatchEvent(new Event('change'));
+      } else if(datos.nombre){
+        selectMov.value = '__nuevo__';
+        selectMov.dispatchEvent(new Event('change'));
+        document.getElementById('mSolicitanteNuevo').value = datos.nombre.toUpperCase().trim();
       }
       if(datos.dni && !document.getElementById('mDni').value) document.getElementById('mDni').value = datos.dni;
       evidenciaMovilidadActual = { dataUrl: 'data:' + doc.tipo_archivo + ';base64,' + doc.data_base64, tipo: doc.tipo_archivo };
       const camposLlenos = ['fecha','precio','concepto','origen_destino','nombre'].filter(k=>datos[k]).length;
-      mensajeResultado = `Voucher de Movilidad recibido. Se pre-llenaron ${camposLlenos} campo(s). Revisa antes de agregar (Tipo de gasto siempre debes elegirlo t\u00fa).`;
+      mensajeResultado = `Voucher de Movilidad recibido. Se pre-llenaron ${camposLlenos} campo(s)${nombreEncontrado?' (nombre confirmado por DNI)':''}. Revisa antes de agregar (Tipo de gasto siempre debes elegirlo t\u00fa).`;
 
     } else if(doc.tipo === 'voucher_banco'){
       // Crea un Egreso en el historial de "Banco en Vivo" (ya no toca un numero suelto)
