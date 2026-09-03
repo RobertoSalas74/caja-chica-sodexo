@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.6</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.7</div>
     </div>
   </header>
 
@@ -1774,35 +1774,82 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
 });
 
 document.getElementById('btnVerMovilidad').addEventListener('click', ()=>{
-  const filasHtml = (lista, tituloTipo) => {
+  const bG = 'border:2px solid #000; font-family:Arial; font-size:11px; padding:4px 8px; text-align:center;';
+  const bF = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:4px 8px;';
+
+  const filasHtml = (lista, tituloHoja) => {
     if(lista.length===0) return '';
-    const filas = lista.map(r=>`
+    const filas = lista.map(r=>{
+      const persona = PERSONAS_DATA[r.solicitante];
+      const firmaCel = persona && persona.firma
+        ? `<img src="data:image/png;base64,${persona.firma}" style="max-width:90px; max-height:36px; object-fit:contain;">`
+        : '<span style="font-size:9px; color:#999;">Sin firma</span>';
+      return `
       <tr>
-        <td style="${estiloTD}">${r.fecha}</td><td style="${estiloTD}">${r.dni}</td><td style="${estiloTD}">${r.solicitante}</td>
-        <td style="${estiloTD}">${r.descripcion}</td><td style="${estiloTD}">${r.origenDestino}</td>
-        <td style="${estiloTD}">S/ ${r.afecto.toFixed(2)}</td><td style="${estiloTD}">S/ ${r.inafecto.toFixed(2)}</td>
-        <td style="${estiloTD}">S/ ${r.total.toFixed(2)}</td>
-      </tr>`).join('');
-    return `<div style="font-family:Arial; font-weight:bold; padding:10px 6px 4px;">${tituloTipo}</div>
+        <td style="${bF}text-align:center;">${r.fecha}</td>
+        <td style="${bF}">${r.dni}</td>
+        <td style="${bF}">${r.solicitante}</td>
+        <td style="${bF}">${r.descripcion}</td>
+        <td style="${bF}">${r.origenDestino}</td>
+        <td style="${bF}text-align:center;">${firmaCel}</td>
+        <td style="${bF}text-align:right;">S/ ${r.afecto.toFixed(2)}</td>
+        <td style="${bF}text-align:right;">S/ ${r.inafecto.toFixed(2)}</td>
+        <td style="${bF}text-align:right; font-weight:bold;">S/ ${r.total.toFixed(2)}</td>
+      </tr>`;
+    }).join('');
+    const totalAfecto = lista.reduce((s,r)=>s+r.afecto,0);
+    const totalInafecto = lista.reduce((s,r)=>s+r.inafecto,0);
+    const totalGeneral = lista.reduce((s,r)=>s+r.total,0);
+    return `
+    <div style="font-family:Arial; font-weight:bold; padding:14px 4px 6px; font-size:13px;">Hoja: ${tituloHoja}</div>
     <table style="border-collapse:collapse; width:100%;">
-      <thead><tr>
-        <th style="${estiloTH}">Fecha</th><th style="${estiloTH}">DNI</th><th style="${estiloTH}">Nombre</th>
-        <th style="${estiloTH}">Concepto</th><th style="${estiloTH}">Origen-Destino</th>
-        <th style="${estiloTH}">Afecto</th><th style="${estiloTH}">Inafecto</th><th style="${estiloTH}">Total</th>
-      </tr></thead>
+      <thead>
+        <tr>
+          <td rowspan="2" style="${bG}">Fecha</td>
+          <td rowspan="2" style="${bG}">DNI</td>
+          <td rowspan="2" style="${bG}">Nombre del Trabajador</td>
+          <td rowspan="2" style="${bG}">Concepto, Detalle, Descripci&oacute;n</td>
+          <td rowspan="2" style="${bG}">Origen - Destino</td>
+          <td rowspan="2" style="${bG}">Firma del trabajador</td>
+          <td colspan="2" style="${bG}">Afecto / Inafecto</td>
+          <td rowspan="2" style="${bG}">Total</td>
+        </tr>
+        <tr>
+          <td style="${bG}">Hasta S/45.20</td>
+          <td style="${bG}">Mas S/45.20</td>
+        </tr>
+      </thead>
       <tbody>${filas}</tbody>
-    </table>`;
+      <tfoot>
+        <tr>
+          <td colspan="6" style="${bF}text-align:right; font-weight:bold;">TOTAL</td>
+          <td style="${bF}text-align:right; font-weight:bold;">S/ ${totalAfecto.toFixed(2)}</td>
+          <td style="${bF}text-align:right; font-weight:bold;">S/ ${totalInafecto.toFixed(2)}</td>
+          <td style="${bF}text-align:right; font-weight:bold;">S/ ${totalGeneral.toFixed(2)}</td>
+        </tr>
+      </tfoot>
+    </table>
+    <div style="display:flex; justify-content:space-around; margin-top:24px; margin-bottom:10px; font-family:Arial; font-size:11px; text-align:center;">
+      <div>_____________________<br>V&deg;B&deg; RESPONSABLE</div>
+      <div>_____________________<br>V&deg;B&deg; ADC O JEFE</div>
+      <div>_____________________<br>V&deg;B&deg; SUPERVISOR</div>
+    </div>`;
   };
   const gasto = registrosMov.filter(r=>r.tipo==='Gasto Sodexo');
   const refact = registrosMov.filter(r=>r.tipo==='Refacturable');
+  const numCaja = cajaActiva || (ultimaCajaCerrada ? parseInt(ultimaCajaCerrada)+1 : '');
+  const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
   const html = `
-    <div style="padding:16px 20px 0; text-align:center;">
-      <img src="data:image/png;base64,${LOGO_SODEXO_B64}" style="height:30px;"><br>
-      <b style="font-family:Arial; font-size:15px;">PLANILLA DE MOVILIDAD</b>
+    <div style="padding:16px 20px 0; display:flex; justify-content:space-between; align-items:center;">
+      <img src="data:image/png;base64,${LOGO_SODEXO_B64}" style="height:30px;">
+      <span style="font-family:Arial; font-size:12px;">PERIODO: ${MESES[new Date().getMonth()]}</span>
     </div>
+    <div style="text-align:center; padding:6px 0;"><b style="font-family:Arial; font-size:16px;">PLANILLA DE MOVILIDAD</b></div>
+    <div style="padding:0 20px 16px;">
     ${filasHtml(gasto, 'Hoja: Gasto') || ''}
     ${filasHtml(refact, 'Hoja: Refact') || ''}
     ${registrosMov.length===0 ? '<div style="padding:20px; text-align:center; font-family:Arial;">Sin vales de movilidad todav\u00eda</div>' : ''}
+    </div>
   `;
   abrirModal('Vista previa — Planilla de Movilidad', html);
 });
