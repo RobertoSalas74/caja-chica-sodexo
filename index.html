@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.5</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.6</div>
     </div>
   </header>
 
@@ -1892,15 +1892,17 @@ function renderPersonasAdmin(){
   }
   cont.innerHTML = nombres.map(nombre=>{
     const p = PERSONAS_DATA[nombre];
-    const firmaImg = p.firma ? `<img src="data:image/png;base64,${p.firma}" style="height:36px; background:#fff; border:1px solid var(--line); border-radius:2px; padding:2px;">` : '<span style="font-size:11px; color:#9a9280;">Sin firma</span>';
+    const firmaImg = p.firma
+      ? `<div style="width:70px; height:40px; display:flex; align-items:center; justify-content:center; background:#fff; border:1px solid var(--line); border-radius:2px; overflow:hidden; flex-shrink:0;"><img src="data:image/png;base64,${p.firma}" style="max-width:100%; max-height:100%; object-fit:contain;"></div>`
+      : `<div style="width:70px; height:40px; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><span style="font-size:10px; color:#9a9280;">Sin firma</span></div>`;
     const idSafe = nombre.replace(/[^A-Za-z0-9]/g,'_');
     return `
       <div style="display:flex; align-items:center; gap:10px; padding:10px; border:1px solid var(--line); border-radius:4px; margin-bottom:8px; flex-wrap:wrap;">
-        <input type="text" id="pnombre_${idSafe}" value="${nombre}" style="flex:2; min-width:140px; padding:6px 8px; font-size:13px;">
-        <input type="text" id="pdni_${idSafe}" value="${p.dni||''}" placeholder="DNI" style="flex:1; min-width:100px; padding:6px 8px; font-size:13px;">
+        <input type="text" id="pnombre_${idSafe}" value="${nombre}" style="width:220px; flex-shrink:0; padding:6px 8px; font-size:13px; box-sizing:border-box;">
+        <input type="text" id="pdni_${idSafe}" value="${p.dni||''}" placeholder="DNI" style="width:110px; flex-shrink:0; padding:6px 8px; font-size:13px; box-sizing:border-box;">
         ${firmaImg}
-        <input type="file" id="pfirma_${idSafe}" accept="image/*" style="max-width:160px; font-size:11px;">
-        <button class="secondary" style="padding:6px 10px; font-size:11px;" onclick="guardarPersona('${nombre.replace(/'/g,"\\'")}','${idSafe}')">Guardar</button>
+        <input type="file" id="pfirma_${idSafe}" accept="image/*" style="width:150px; flex-shrink:0; font-size:11px;">
+        <button class="secondary" style="padding:6px 10px; font-size:11px; flex-shrink:0;" onclick="guardarPersona('${nombre.replace(/'/g,"\\'")}','${idSafe}')">Guardar</button>
         <button class="del-btn" onclick="eliminarPersona('${nombre.replace(/'/g,"\\'")}')">Eliminar</button>
       </div>`;
   }).join('');
