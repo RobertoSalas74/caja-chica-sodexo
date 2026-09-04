@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.11</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.12</div>
     </div>
   </header>
 
@@ -239,6 +239,15 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       al momento. <b>Esto NO alimenta Reclasificaci&oacute;n, Movilidad ni Arqueo</b> &mdash; es solo un
       cuadre visual tuyo. Al cerrar la caja, puedes descargar este historial aparte.
     </p>
+
+    <div style="background:var(--accent-soft); border:1px solid var(--accent); border-radius:3px; padding:12px; margin-bottom:14px;">
+      <label for="bArchivoLector" style="margin-bottom:6px;">&#128248; Cargar foto del voucher de banco (pre-llena el formulario)</label>
+      <input type="file" id="bArchivoLector" accept="application/pdf,image/*">
+      <div class="actions" style="margin-top:10px;">
+        <button class="secondary" id="btnRecibirCelularBanco" style="padding:8px 14px; font-size:11px;">&#128241; Recibir fotos del celular</button>
+      </div>
+      <div id="bLectorEstado" style="font-family:var(--mono); font-size:11px; margin-top:6px; color:#6b6255;"></div>
+    </div>
 
     <div class="grid" style="margin-bottom:14px;">
       <div class="span2">
@@ -1535,6 +1544,27 @@ async function leerDocumentoConIA(file, tipoDoc){
 
 let evidenciaFacturaActual = null; // dataURL de la foto/PDF cargado, para "Ver documento" despues
 let evidenciaMovilidadActual = null;
+
+document.getElementById('bArchivoLector').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  const estado = document.getElementById('bLectorEstado');
+  if(!file) return;
+  estado.textContent = 'Leyendo voucher con IA, un momento...';
+  try{
+    const datos = await leerDocumentoConIA(file, 'factura');
+    if(datos.fecha) document.getElementById('bancoMovFecha').value = datos.fecha;
+    if(datos.precio) document.getElementById('bancoMovMonto').value = datos.precio;
+    document.getElementById('bancoMovDescripcion').value = datos.descripcion || ('Voucher de Banco' + (datos.documento ? ' - ' + datos.documento : ''));
+    document.getElementById('bancoMovTipo').value = 'egreso';
+    const camposLlenos = ['fecha','precio','descripcion','documento'].filter(k=>datos[k]).length;
+    estado.textContent = `Voucher le\u00eddo. Se pre-llenaron ${camposLlenos} campo(s). Revisa el Tipo (Ingreso/Egreso) y presiona "Agregar movimiento".`;
+  } catch(err){
+    estado.textContent = 'No se pudo leer el voucher con IA: ' + err.message + '. Ingr\u00e9salo manualmente.';
+  }
+  e.target.value = '';
+});
+
+document.getElementById('btnRecibirCelularBanco').addEventListener('click', ()=> recibirDocumentoCelular('bLectorEstado'));
 
 document.getElementById('fArchivoLector').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
