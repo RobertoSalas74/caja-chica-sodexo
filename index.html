@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.10</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.11</div>
     </div>
   </header>
 
@@ -250,9 +250,9 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       </div>
     </div>
 
-    <div style="background:var(--ok-soft); border:1px solid var(--ok); border-radius:4px; padding:14px; text-align:center; margin-bottom:16px;">
-      <div style="font-family:var(--mono); font-size:11px; text-transform:uppercase; color:#6b6255;">Saldo Real Actual</div>
-      <div id="bancoSaldoActual" style="font-size:28px; font-weight:bold; color:var(--ok);">S/ 0.00</div>
+    <div style="background:var(--ok-soft); border:1px solid var(--ok); border-radius:8px; padding:24px; text-align:center; margin-bottom:16px;">
+      <div style="font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:.06em; font-weight:bold; color:var(--ok);">Saldo Real Actual</div>
+      <div id="bancoSaldoActual" style="font-size:36px; font-weight:bold; color:var(--ok); margin-top:8px;">S/ 0.00</div>
     </div>
 
     <div class="grid">
@@ -282,6 +282,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     </div>
 
     <div id="listaMovimientosBanco" style="margin-top:16px;"></div>
+    <div id="totalesMovimientosBanco" style="margin-top:16px;"></div>
   </div>
 
   <div class="panel" id="panelFactura" style="display:none;">
@@ -739,19 +740,41 @@ function calcularSaldoActualBanco(){
 function renderBancoEnVivo(){
   document.getElementById('bancoSaldoActual').textContent = 'S/ ' + calcularSaldoActualBanco().toFixed(2);
   const lista = document.getElementById('listaMovimientosBanco');
+  const totalesCont = document.getElementById('totalesMovimientosBanco');
   if(movimientosBanco.length===0){
     lista.innerHTML = '<div class="empty-state">Sin movimientos registrados todav\u00eda.</div>';
+    totalesCont.innerHTML = '';
     return;
   }
-  const filas = movimientosBanco.map((m,i)=>`
+  let saldoAcum = saldoInicialBanco;
+  const filas = movimientosBanco.map((m,i)=>{
+    saldoAcum += m.tipo==='ingreso' ? m.monto : -m.monto;
+    return `
     <tr>
       <td class="small">${m.fecha}</td>
-      <td>${m.descripcion} ${m.tipo==='ingreso' ? '<span class="badge" style="background:var(--ok-soft); color:var(--ok);">Ingreso</span>' : '<span class="badge">Egreso</span>'}</td>
-      <td class="num">${m.tipo==='ingreso'?'+':'-'} S/ ${m.monto.toFixed(2)}</td>
+      <td>${m.descripcion}</td>
+      <td class="num" style="color:var(--ok);">${m.tipo==='ingreso' ? 'S/ '+m.monto.toFixed(2) : ''}</td>
+      <td class="num" style="color:#c0392b;">${m.tipo==='egreso' ? 'S/ '+m.monto.toFixed(2) : ''}</td>
+      <td class="num" style="font-weight:bold;">S/ ${saldoAcum.toFixed(2)}</td>
       <td><button class="del-btn" onclick="eliminarMovimientoBanco(${i})">Eliminar</button></td>
     </tr>
-  `).join('');
-  lista.innerHTML = `<table><thead><tr><th>Fecha</th><th>Descripci\u00f3n</th><th>Monto</th><th></th></tr></thead><tbody>${filas}</tbody></table>`;
+  `;
+  }).join('');
+  lista.innerHTML = `<table><thead><tr><th>Fecha</th><th>Descripci\u00f3n</th><th>Ingreso</th><th>Egreso</th><th>Saldo</th><th></th></tr></thead><tbody>${filas}</tbody></table>`;
+
+  const totalIngresos = movimientosBanco.filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+m.monto,0);
+  const totalEgresos = movimientosBanco.filter(m=>m.tipo==='egreso').reduce((s,m)=>s+m.monto,0);
+  totalesCont.innerHTML = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div style="background:var(--ok-soft); border-radius:6px; padding:12px; text-align:center;">
+        <div style="font-family:var(--mono); font-size:11px; text-transform:uppercase; color:var(--ok);">Total Ingresos</div>
+        <div style="font-size:20px; font-weight:bold; color:var(--ok); margin-top:4px;">S/ ${totalIngresos.toFixed(2)}</div>
+      </div>
+      <div style="background:#fdecea; border-radius:6px; padding:12px; text-align:center;">
+        <div style="font-family:var(--mono); font-size:11px; text-transform:uppercase; color:#c0392b;">Total Egresos</div>
+        <div style="font-size:20px; font-weight:bold; color:#c0392b; margin-top:4px;">S/ ${totalEgresos.toFixed(2)}</div>
+      </div>
+    </div>`;
 }
 
 function eliminarMovimientoBanco(i){
