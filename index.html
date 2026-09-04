@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.7</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.8</div>
     </div>
   </header>
 
@@ -1859,72 +1859,76 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
   const totalComprobantes = registros.reduce((s,r)=>s+r.total,0);
   const totalVales = registrosMov.reduce((s,r)=>s+r.total,0);
   const totalPendientes = cajasCerradas.reduce((s,c)=>s+c.monto,0);
+  const saldoBanco = calcularSaldoActualBanco();
+  const totalEfectivo = saldoBanco; // billetes/monedas fisicos se cuentan en 0 hasta que se ingresen manualmente
   const fondoFijo = 8000;
   const importeTotal = totalComprobantes + totalVales + totalPendientes;
   const diferencia = importeTotal - fondoFijo;
 
-  const bG = 'border:2px solid #000; font-family:Arial; font-size:11px; padding:4px 8px;';
-  const bF = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:4px 8px;';
-  const bTitulo = 'font-family:Arial; font-weight:bold; font-size:12px; background:#e8e8e8; border:2px solid #000; padding:4px 8px;';
+  const bF = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:2px 6px;';
+  const bFc = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:2px 6px; text-align:center;';
+  const bFr = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:2px 6px; text-align:right;';
+  const bH = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:2px 6px; font-weight:bold; background:#f2f2f2;';
+  const bHc = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:2px 6px; font-weight:bold; background:#f2f2f2; text-align:center;';
+  const bSec = 'font-family:Arial; font-size:11px; font-weight:bold; padding:3px 6px; border:1px solid #000; background:#fff;';
 
-  const filaComprobantes = registros.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bF}">${r.documento||''}</td><td style="${bF}text-align:right;">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
-  const filaVales = registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bF}text-align:right;">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
-  const filaPendientes = cajasCerradas.map(c=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bF}text-align:right;">S/ ${c.monto.toFixed(2)}</td></tr>`).join('');
+  const filaComprobantes = registros.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bFc}">${r.documento||''}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
+  const filaVales = registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">CARLOS HIGA</td></tr>`).join('');
+  const filaPendientes = cajasCerradas.map(c=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td></tr>`).join('');
 
   const denominaciones = [200,100,50,20,10];
   const monedas = [5,2,1,0.5,0.2,0.1,0.05,0.01];
-  const filasBilletes = denominaciones.map(d=>`<tr><td style="${bF}text-align:center;">S/ ${d.toFixed(2)}</td><td style="${bF}text-align:center;">0</td><td style="${bF}text-align:right;">S/ 0.00</td></tr>`).join('');
-  const filasMonedas = monedas.map(d=>`<tr><td style="${bF}text-align:center;">S/ ${d.toFixed(2)}</td><td style="${bF}text-align:center;">0</td><td style="${bF}text-align:right;">S/ 0.00</td></tr>`).join('');
+  const filasBilletes = denominaciones.map((d,i)=>`<tr>${i===0?`<td rowspan="${denominaciones.length}" style="${bFc}writing-mode:vertical-rl; text-orientation:mixed; transform:rotate(180deg);">BILLETES</td>`:''}<td style="${bFc}">S/ ${d.toFixed(2)}</td><td style="${bFc}">0</td><td style="${bFr}">S/. -</td></tr>`).join('');
+  const filasMonedas = monedas.map((d,i)=>`<tr>${i===0?`<td rowspan="${monedas.length}" style="${bFc}writing-mode:vertical-rl; text-orientation:mixed; transform:rotate(180deg);">MONEDAS</td>`:''}<td style="${bFc}">S/ ${d.toFixed(2)}</td><td style="${bFc}">0</td><td style="${bFr}">S/. -</td></tr>`).join('');
 
   const html = `
-    <div style="padding:16px 20px 0; display:flex; justify-content:space-between; align-items:flex-start;">
-      <img src="data:image/png;base64,${LOGO_SODEXO_B64}" style="height:32px;">
-      <div style="text-align:right; font-family:Arial;">
-        <div><b>Contrato:</b> KIMBERLY CLARK SANTA CLARA</div>
-        <div><b>Fecha:</b> ${new Date().toLocaleDateString('es-PE')}</div>
-      </div>
-    </div>
-    <div style="text-align:center; padding:8px 0;"><b style="font-family:Arial; font-size:16px;">ARQUEO DE CAJA ${numCaja}- FM</b></div>
+    <div style="padding:16px 20px 0; font-family:Arial;">
+      <table style="border-collapse:collapse; width:100%; margin-bottom:6px;">
+        <tr>
+          <td style="border:1px solid #000; padding:4px 10px; width:35%;"><img src="data:image/png;base64,${LOGO_SODEXO_B64}" style="height:26px;"></td>
+          <td style="border:1px solid #000; padding:4px 10px; text-align:center; font-weight:bold; font-size:13px;">ARQUEO DE CAJA ${numCaja}- FM</td>
+        </tr>
+      </table>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
+        <tr><td style="${bF}font-weight:bold; width:15%;">Contrato</td><td style="${bF}" colspan="3">KIMBERLY CLARK SANTA CLARA</td></tr>
+        <tr><td style="${bF}font-weight:bold;">FECHA:</td><td style="${bF}" colspan="3">${new Date().toLocaleDateString('es-PE')}</td></tr>
+      </table>
 
-    <div style="padding:0 20px 16px;">
-      <table style="border-collapse:collapse; width:100%; margin-bottom:14px;">
-        <tr><td colspan="3" style="${bTitulo}">1.- EFECTIVO</td></tr>
-        <tr><td style="${bF}text-align:center; font-weight:bold;">BILLETES</td><td style="${bF}text-align:center; font-weight:bold;">Cantidad</td><td style="${bF}text-align:center; font-weight:bold;">Importe</td></tr>
+      <div style="${bSec}">1.- EFECTIVO</div>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
+        <tr><td style="${bHc}" rowspan="2"></td><td style="${bHc}">Denominaci&oacute;n</td><td style="${bHc}">Cantidad</td><td style="${bHc}">Importe</td></tr>
         ${filasBilletes}
-        <tr><td style="${bF}text-align:center; font-weight:bold;">MONEDAS</td><td style="${bF}"></td><td style="${bF}"></td></tr>
         ${filasMonedas}
-        <tr><td style="${bF}font-weight:bold;">BANCO</td><td style="${bF}" colspan="2" style="text-align:right;">Ver panel "Banco en Vivo" (no incluido aqu&iacute;)</td></tr>
-        <tr><td colspan="2" style="${bF}text-align:right; font-weight:bold;">TOTAL EFECTIVO</td><td style="${bF}text-align:right; font-weight:bold;">S/ 0.00</td></tr>
+        <tr><td colspan="2" style="${bH}">BANCO</td><td style="${bFc}">0</td><td style="${bFr}">S/. ${saldoBanco.toFixed(2)}</td></tr>
+        <tr><td colspan="3" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalEfectivo.toFixed(2)}</td></tr>
+      </table>
+
+      <div style="${bSec}">2.- COMPROBANTES DE PAGO (FACTURAS, RRHH, ETC)</div>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
+        <tr><td style="${bH}">Fecha</td><td style="${bH}">Concepto</td><td style="${bHc}">Nro. Doc.</td><td style="${bH}text-align:right;">Importe</td></tr>
+        ${filaComprobantes || `<tr><td colspan="4" style="${bFc}">Sin comprobantes</td></tr>`}
+        <tr><td colspan="3" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalComprobantes.toFixed(2)}</td></tr>
+      </table>
+
+      <div style="${bSec}">3.- VALES PROVISIONALES</div>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
+        <tr><td style="${bH}">Fecha</td><td style="${bH}">Beneficiario</td><td style="${bH}">Motivo</td><td style="${bH}text-align:right;">Importe</td><td style="${bH}">Autorizante</td></tr>
+        ${filaVales || `<tr><td colspan="5" style="${bFc}">Sin vales</td></tr>`}
+        <tr><td colspan="3" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalVales.toFixed(2)}</td><td style="${bF}"></td></tr>
+      </table>
+
+      <div style="${bSec}">4.- CAJAS CHICAS PENDIENTES DE REPOSICION</div>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
+        <tr><td style="${bH}">Fecha</td><td style="${bH}">N&uacute;mero o denominaci&oacute;n</td><td style="${bH}text-align:right;">Importe</td></tr>
+        ${filaPendientes || `<tr><td colspan="3" style="${bFc}">Sin cajas pendientes</td></tr>`}
+        <tr><td colspan="2" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalPendientes.toFixed(2)}</td></tr>
       </table>
 
       <table style="border-collapse:collapse; width:100%; margin-bottom:14px;">
-        <tr><td colspan="4" style="${bTitulo}">2.- COMPROBANTES DE PAGO (FACTURAS, RRHH, ETC)</td></tr>
-        <tr><td style="${bF}font-weight:bold;">Fecha</td><td style="${bF}font-weight:bold;">Concepto</td><td style="${bF}font-weight:bold;">N&deg; Doc.</td><td style="${bF}font-weight:bold;">Importe</td></tr>
-        ${filaComprobantes || `<tr><td colspan="4" style="${bF}text-align:center;">Sin comprobantes</td></tr>`}
-        <tr><td colspan="3" style="${bF}text-align:right; font-weight:bold;">TOTAL</td><td style="${bF}text-align:right; font-weight:bold;">S/ ${totalComprobantes.toFixed(2)}</td></tr>
+        <tr><td style="${bH}">FONDO FIJO ASIGNADO</td><td style="${bFr}">S/. ${fondoFijo.toFixed(2)}</td></tr>
+        <tr><td style="${bH}">IMPORTE TOTAL CAJA (2+3+4)</td><td style="${bFr}">S/. ${importeTotal.toFixed(2)}</td></tr>
+        <tr><td style="${bH}">DIFERENCIA</td><td style="${bFr}color:${Math.abs(diferencia)<0.01?'green':'red'}; font-weight:bold;">S/. ${diferencia.toFixed(2)}</td></tr>
       </table>
-
-      <table style="border-collapse:collapse; width:100%; margin-bottom:14px;">
-        <tr><td colspan="4" style="${bTitulo}">3.- VALES PROVISIONALES</td></tr>
-        <tr><td style="${bF}font-weight:bold;">Fecha</td><td style="${bF}font-weight:bold;">Beneficiario</td><td style="${bF}font-weight:bold;">Motivo</td><td style="${bF}font-weight:bold;">Importe</td></tr>
-        ${filaVales || `<tr><td colspan="4" style="${bF}text-align:center;">Sin vales</td></tr>`}
-        <tr><td colspan="3" style="${bF}text-align:right; font-weight:bold;">TOTAL</td><td style="${bF}text-align:right; font-weight:bold;">S/ ${totalVales.toFixed(2)}</td></tr>
-      </table>
-
-      <table style="border-collapse:collapse; width:100%; margin-bottom:14px;">
-        <tr><td colspan="3" style="${bTitulo}">4.- CAJAS CHICAS PENDIENTES DE REPOSICION</td></tr>
-        <tr><td style="${bF}font-weight:bold;">Fecha</td><td style="${bF}font-weight:bold;">N&uacute;mero o denominaci&oacute;n</td><td style="${bF}font-weight:bold;">Importe</td></tr>
-        ${filaPendientes || `<tr><td colspan="3" style="${bF}text-align:center;">Sin cajas pendientes</td></tr>`}
-        <tr><td colspan="2" style="${bF}text-align:right; font-weight:bold;">TOTAL</td><td style="${bF}text-align:right; font-weight:bold;">S/ ${totalPendientes.toFixed(2)}</td></tr>
-      </table>
-
-      <table style="border-collapse:collapse; width:100%;">
-        <tr><td colspan="2" style="${bTitulo}">TOTALES</td></tr>
-        <tr><td style="${bG}font-weight:bold;">FONDO FIJO ASIGNADO</td><td style="${bG}text-align:right;">S/ ${fondoFijo.toFixed(2)}</td></tr>
-        <tr><td style="${bG}font-weight:bold;">IMPORTE TOTAL CAJA (1+2+3+4)</td><td style="${bG}text-align:right;">S/ ${importeTotal.toFixed(2)}</td></tr>
-        <tr><td style="${bG}font-weight:bold;">DIFERENCIA</td><td style="${bG}text-align:right; color:${Math.abs(diferencia)<0.01?'green':'red'}; font-weight:bold;">S/ ${diferencia.toFixed(2)}</td></tr>
-      </table>
-      <p style="font-family:Arial; font-size:10px; color:#888; margin-top:10px;">Nota: la Secci&oacute;n 1 (Efectivo/Banco) no se llena aqu&iacute; porque "Banco en Vivo" es un panel aparte, solo visual. En el Excel real esa fila queda vac&iacute;a o la completas manualmente antes de imprimir.</p>
     </div>`;
   abrirModal('Vista previa — Arqueo de Caja', html);
 });
