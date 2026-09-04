@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.8</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.9</div>
     </div>
   </header>
 
@@ -1874,7 +1874,7 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
 
   const filaComprobantes = registros.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bFc}">${r.documento||''}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
   const filaVales = registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">CARLOS HIGA</td></tr>`).join('');
-  const filaPendientes = cajasCerradas.map(c=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td></tr>`).join('');
+  const filaPendientes = cajasCerradas.map(c=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td><td style="${bFc}"></td></tr>`).join('');
 
   const denominaciones = [200,100,50,20,10];
   const monedas = [5,2,1,0.5,0.2,0.1,0.05,0.01];
@@ -1919,9 +1919,9 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
 
       <div style="${bSec}">4.- CAJAS CHICAS PENDIENTES DE REPOSICION</div>
       <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
-        <tr><td style="${bH}">Fecha</td><td style="${bH}">N&uacute;mero o denominaci&oacute;n</td><td style="${bH}text-align:right;">Importe</td></tr>
-        ${filaPendientes || `<tr><td colspan="3" style="${bFc}">Sin cajas pendientes</td></tr>`}
-        <tr><td colspan="2" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalPendientes.toFixed(2)}</td></tr>
+        <tr><td style="${bH}">Fecha</td><td style="${bH}">N&uacute;mero o denominaci&oacute;n</td><td style="${bH}text-align:right;">Importe</td><td style="${bH}">Ubicaci&oacute;n</td></tr>
+        ${filaPendientes || `<tr><td colspan="4" style="${bFc}">Sin cajas pendientes</td></tr>`}
+        <tr><td colspan="2" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalPendientes.toFixed(2)}</td><td style="${bF}"></td></tr>
       </table>
 
       <table style="border-collapse:collapse; width:100%; margin-bottom:14px;">
@@ -1929,6 +1929,27 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
         <tr><td style="${bH}">IMPORTE TOTAL CAJA (2+3+4)</td><td style="${bFr}">S/. ${importeTotal.toFixed(2)}</td></tr>
         <tr><td style="${bH}">DIFERENCIA</td><td style="${bFr}color:${Math.abs(diferencia)<0.01?'green':'red'}; font-weight:bold;">S/. ${diferencia.toFixed(2)}</td></tr>
       </table>
+
+      <div style="${bSec}">OBSERVACIONES</div>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:20px;">
+        <tr><td style="${bF}height:60px; vertical-align:top;">&nbsp;</td></tr>
+      </table>
+
+      <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
+        <tr>
+          <td style="border:1px solid #000; width:50%; text-align:center; padding:30px 10px 4px; font-family:Arial; font-size:11px;">FIRMA DEL RESPONSABLE</td>
+          <td style="border:1px solid #000; width:50%; text-align:center; padding:30px 10px 4px; font-family:Arial; font-size:11px;">FIRMA DEL ARQUEADOR</td>
+        </tr>
+        <tr>
+          <td style="border:1px solid #000; text-align:center; padding:4px 10px; font-family:Arial; font-size:11px;">Nombre: Roberto Salas</td>
+          <td style="border:1px solid #000; text-align:center; padding:4px 10px; font-family:Arial; font-size:11px;">Nombre: JUAN GONZALES RUIZ</td>
+        </tr>
+        <tr>
+          <td style="border:1px solid #000; text-align:center; padding:4px 10px; font-family:Arial; font-size:11px;">Cargo: Asistente administrativo</td>
+          <td style="border:1px solid #000; text-align:center; padding:4px 10px; font-family:Arial; font-size:11px;">Cargo: Cost Controller</td>
+        </tr>
+      </table>
+      <p style="font-family:Arial; font-size:9px; color:#888; margin:4px 0 16px;">R-DOC-CON-01-04 &nbsp;&nbsp;|&nbsp;&nbsp; Rev. 01</p>
     </div>`;
   abrirModal('Vista previa — Arqueo de Caja', html);
 });
