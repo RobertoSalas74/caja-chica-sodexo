@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.12</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.13</div>
     </div>
   </header>
 
@@ -1713,19 +1713,15 @@ async function recibirDocumentoCelular(estadoElId){
       mensajeResultado = `Voucher de Movilidad recibido. Se pre-llenaron ${camposLlenos} campo(s)${nombreEncontrado?' (nombre confirmado por DNI)':''}. Revisa antes de agregar (Tipo de gasto siempre debes elegirlo t\u00fa).`;
 
     } else if(doc.tipo === 'voucher_banco'){
-      // Crea un Egreso en el historial de "Banco en Vivo" (ya no toca un numero suelto)
-      if(datos.precio){
-        movimientosBanco.push({
-          fecha: datos.fecha || new Date().toISOString().slice(0,10),
-          tipo: 'egreso',
-          descripcion: 'Voucher de Banco (celular)' + (datos.documento ? ' - ' + datos.documento : ''),
-          monto: datos.precio
-        });
-        renderBancoEnVivo();
-        mensajeResultado = `Voucher de Banco: egreso de S/ ${datos.precio.toFixed(2)} agregado al historial. Saldo real actual: S/ ${calcularSaldoActualBanco().toFixed(2)}.`;
-      } else {
-        mensajeResultado = 'Voucher de Banco recibido, pero no se pudo leer el monto. Agr\u00e9galo manualmente en "Banco en Vivo".';
-      }
+      // Pre-llena el formulario de Banco en Vivo para que el usuario revise/escriba y guarde el mismo
+      irAModo('efectivo');
+      if(datos.fecha) document.getElementById('bancoMovFecha').value = datos.fecha;
+      if(datos.precio) document.getElementById('bancoMovMonto').value = datos.precio;
+      document.getElementById('bancoMovDescripcion').value = datos.descripcion || ('Voucher de Banco' + (datos.documento ? ' - ' + datos.documento : ''));
+      document.getElementById('bancoMovTipo').value = 'egreso';
+      evidenciaFacturaActual = { dataUrl: 'data:' + doc.tipo_archivo + ';base64,' + doc.data_base64, tipo: doc.tipo_archivo };
+      const camposLlenos = ['fecha','precio','descripcion','documento'].filter(k=>datos[k]).length;
+      mensajeResultado = `Voucher de Banco recibido. Se pre-llenaron ${camposLlenos} campo(s). Revisa/edita la descripci\u00f3n, confirma el Tipo (Ingreso/Egreso) y presiona "Agregar movimiento" para guardarlo.`;
     } else {
       mensajeResultado = `Documento de tipo "${doc.tipo}" recibido, pero no tiene una acci\u00f3n definida.`;
     }
