@@ -153,7 +153,19 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<div id="overlayLogin" style="position:fixed; inset:0; background:var(--paper); z-index:9999; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:18px;">
+  <img id="logoSodexoLogin" src="" alt="Sodexo" style="height:44px; width:auto;">
+  <div style="text-align:center; font-family:'Fraunces','Georgia',serif; font-size:22px; font-weight:bold; color:var(--ink);">Control de Caja Chica</div>
+  <div style="background:#fff; border:1px solid var(--line); border-radius:6px; padding:24px; width:280px; box-shadow:0 4px 16px rgba(0,0,0,.08);">
+    <label for="inputClaveLogin" style="display:block; margin-bottom:8px;">Clave de acceso</label>
+    <input type="password" id="inputClaveLogin" style="width:100%; box-sizing:border-box; padding:10px; font-size:16px; margin-bottom:12px;" autocomplete="off">
+    <button id="btnIngresarLogin" style="width:100%; padding:10px;">Ingresar</button>
+    <div id="errorLogin" style="color:var(--accent); font-size:12px; margin-top:10px; text-align:center; min-height:16px;"></div>
+  </div>
+</div>
+
+<div class="wrap" id="appPrincipal" style="display:none;">
 
   <header>
     <div style="display:flex; align-items:center; gap:14px;">
@@ -164,6 +176,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       </div>
     </div>
     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+      <button id="btnCerrarSesion" class="secondary" style="padding:4px 10px; font-size:10px;">&#128274; Cerrar sesi&oacute;n</button>
       <div class="actions" id="grupoBotonesTipo" style="margin-top:0; gap:4px; display:none;">
         <button id="btnTipoMantenimiento" style="padding:6px 14px; font-size:11px;">&#128295; Mantenimiento</button>
         <button id="btnTipoFoods" class="secondary" style="padding:6px 14px; font-size:11px;">&#127869; Foods</button>
@@ -173,7 +186,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.18</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.19</div>
     </div>
   </header>
 
@@ -227,6 +240,22 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <input type="text" id="inputAutorizante" placeholder="Ej. CARLOS HIGA" style="flex:1;">
         <button id="btnGuardarAutorizante" style="padding:8px 14px; font-size:12px;">Guardar</button>
       </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid var(--line); border-radius:4px; padding:12px; margin-bottom:16px;">
+      <label style="display:block; margin-bottom:6px;">Cambiar clave de acceso</label>
+      <div class="grid" style="margin-top:0;">
+        <div class="span2">
+          <input type="password" id="inputClaveActualCambio" placeholder="Clave actual">
+        </div>
+        <div class="span2">
+          <input type="password" id="inputClaveNuevaCambio" placeholder="Clave nueva">
+        </div>
+      </div>
+      <div class="actions">
+        <button id="btnCambiarClave" style="padding:8px 14px; font-size:12px;">Cambiar clave</button>
+      </div>
+      <div id="mensajeCambioClave" style="font-size:12px; margin-top:6px; min-height:16px;"></div>
     </div>
 
     <p style="font-size:13px; margin:0 0 14px; color:#6b6255;">
@@ -1987,6 +2016,60 @@ document.getElementById('btnRecibirCelular').addEventListener('click', ()=> reci
 document.getElementById('btnRecibirCelularMov').addEventListener('click', ()=> recibirDocumentoCelular('mLectorEstado'));
 
 document.getElementById('logoSodexoHeader').src = 'data:image/png;base64,' + LOGO_SODEXO_B64;
+document.getElementById('logoSodexoLogin').src = 'data:image/png;base64,' + LOGO_SODEXO_B64;
+
+// ── Pantalla de acceso: la clave se verifica en el servidor (Edge Function), nunca en el navegador ──
+(function(){
+  const overlay = document.getElementById('overlayLogin');
+  const appPrincipal = document.getElementById('appPrincipal');
+  const inputClave = document.getElementById('inputClaveLogin');
+  const errorDiv = document.getElementById('errorLogin');
+  const btnIngresar = document.getElementById('btnIngresarLogin');
+
+  function mostrarApp(){
+    overlay.style.display = 'none';
+    appPrincipal.style.display = 'block';
+  }
+
+  if(localStorage.getItem('cajaChicaSesionOk') === '1'){
+    mostrarApp();
+  } else {
+    inputClave.focus();
+  }
+
+  async function intentarIngresar(){
+    const clave = inputClave.value;
+    if(!clave){ inputClave.focus(); return; }
+    btnIngresar.disabled = true;
+    btnIngresar.textContent = 'Verificando...';
+    errorDiv.textContent = '';
+    try{
+      const { data, error } = await supabaseClient.functions.invoke('verificar-clave', { body: { clave } });
+      if(error) throw error;
+      if(data && data.ok){
+        localStorage.setItem('cajaChicaSesionOk', '1');
+        mostrarApp();
+      } else {
+        errorDiv.textContent = 'Clave incorrecta.';
+        inputClave.value = '';
+        inputClave.focus();
+      }
+    } catch(e){
+      errorDiv.textContent = 'Error al verificar: ' + e.message;
+    }
+    btnIngresar.disabled = false;
+    btnIngresar.textContent = 'Ingresar';
+  }
+
+  btnIngresar.addEventListener('click', intentarIngresar);
+  inputClave.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') intentarIngresar(); });
+
+  document.getElementById('btnCerrarSesion').addEventListener('click', ()=>{
+    if(!confirm('\u00bfCerrar sesi\u00f3n? Tendr\u00e1s que ingresar la clave de nuevo.')) return;
+    localStorage.removeItem('cajaChicaSesionOk');
+    location.reload();
+  });
+})();
 recalcularFactura();
 
 // ── Cargar firmas permanentes guardadas desde el celular (se fusionan con las 11 base) ──
@@ -2012,6 +2095,30 @@ document.getElementById('btnGuardarAutorizante').addEventListener('click', async
     alert('Autorizante actualizado. Los pr\u00f3ximos Arqueos ya lo usar\u00e1n.');
   } catch(err){
     alert('Error al guardar el autorizante: ' + err.message);
+  }
+});
+
+document.getElementById('btnCambiarClave').addEventListener('click', async ()=>{
+  const claveActual = document.getElementById('inputClaveActualCambio').value;
+  const claveNueva = document.getElementById('inputClaveNuevaCambio').value;
+  const msg = document.getElementById('mensajeCambioClave');
+  msg.style.color = '';
+  if(!claveActual || !claveNueva){ msg.style.color='var(--accent)'; msg.textContent = 'Completa ambos campos.'; return; }
+  try{
+    const { data, error } = await supabaseClient.functions.invoke('cambiar-clave', { body: { claveActual, claveNueva } });
+    if(error) throw error;
+    if(data && data.ok){
+      msg.style.color = 'var(--ok)';
+      msg.textContent = 'Clave actualizada correctamente.';
+      document.getElementById('inputClaveActualCambio').value = '';
+      document.getElementById('inputClaveNuevaCambio').value = '';
+    } else {
+      msg.style.color = 'var(--accent)';
+      msg.textContent = (data && data.error) ? data.error : 'No se pudo cambiar la clave.';
+    }
+  } catch(err){
+    msg.style.color = 'var(--accent)';
+    msg.textContent = 'Error: ' + err.message;
   }
 });
 
