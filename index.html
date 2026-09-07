@@ -173,7 +173,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.16</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.17</div>
     </div>
   </header>
 
@@ -187,17 +187,21 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
           <button type="button" id="btnAbrirComoFoods" class="secondary" style="flex:1; padding:10px;">&#127869; Foods</button>
         </div>
       </div>
-      <div class="span2">
-        <label for="inputNumCaja">N&deg; de Caja a trabajar</label>
-        <input type="number" id="inputNumCaja" placeholder="Ej. 129">
-      </div>
-      <div class="span2">
-        <label for="inputFondoFijo">Fondo Fijo asignado (S/)</label>
-        <input type="number" id="inputFondoFijo" placeholder="Ej. 8000" value="8000">
+      <div class="span2" id="camposNumFondo" style="display:none;">
+        <div class="grid" style="margin-top:0;">
+          <div class="span2">
+            <label for="inputNumCaja">N&deg; de Caja a trabajar</label>
+            <input type="number" id="inputNumCaja" placeholder="Ej. 129">
+          </div>
+          <div class="span2">
+            <label for="inputFondoFijo">Fondo Fijo asignado (S/)</label>
+            <input type="number" id="inputFondoFijo" placeholder="Ej. 8000" value="8000">
+          </div>
+        </div>
       </div>
     </div>
     <div class="actions">
-      <button id="btnConfirmarAbrirCaja">Confirmar apertura</button>
+      <button id="btnConfirmarAbrirCaja" style="display:none;">Confirmar apertura</button>
       <button class="secondary" id="btnCancelarAbrirCaja">Cancelar</button>
     </div>
   </div>
@@ -580,13 +584,13 @@ const panelAbrirCaja = document.getElementById('panelAbrirCaja');
 const inputNumCaja = document.getElementById('inputNumCaja');
 
 function actualizarBadgeCaja(){
-  const etiquetaTipo = cajaTipoActiva === 'foods' ? 'FOODS' : 'MANTENIMIENTO';
   if(cajaActiva){
+    const etiquetaTipo = cajaTipoActiva === 'foods' ? 'FOODS' : 'MANTENIMIENTO';
     cajaBadge.textContent = etiquetaTipo + ' — CAJA ' + cajaActiva;
     cajaBadge.style.background = '';
     btnCerrarCaja.disabled = false;
   } else {
-    cajaBadge.textContent = etiquetaTipo + ' — SIN CAJA ABIERTA';
+    cajaBadge.textContent = 'SIN CAJA ABIERTA';
     btnCerrarCaja.disabled = true;
   }
 }
@@ -644,34 +648,64 @@ async function verificarCajasAbiertas(){
   actualizarEstadoBotonAbrir();
 }
 
+// Busca el ultimo numero de caja cerrada de un tipo especifico, para sugerir el correlativo
+async function obtenerUltimaCerradaDeTipo(tipo){
+  try{
+    const { data, error } = await supabaseClient.from('cajas')
+      .select('numero').eq('tipo',tipo).eq('estado','cerrada').order('fecha_cierre',{ascending:false}).limit(1);
+    if(error || !data || data.length===0) return null;
+    return data[0].numero;
+  } catch(e){ return null; }
+}
+
+function mostrarCamposNumFondo(tipo){
+  document.getElementById('camposNumFondo').style.display = 'block';
+  document.getElementById('btnConfirmarAbrirCaja').style.display = '';
+}
+
 btnAbrirCaja.addEventListener('click', async ()=>{
   await verificarCajasAbiertas();
   if(hayMantenimientoAbierta && hayFoodsAbierta) return; // no deberia poder llegar aqui, boton deshabilitado
 
   const grupoTipo = document.getElementById('grupoTipoAbrirCaja');
+  const camposNumFondo = document.getElementById('camposNumFondo');
+  const btnConfirmar = document.getElementById('btnConfirmarAbrirCaja');
+  camposNumFondo.style.display = 'none';
+  btnConfirmar.style.display = 'none';
+  inputNumCaja.value = '';
+
   if(!hayMantenimientoAbierta && !hayFoodsAbierta){
-    // Ninguna caja abierta: hay que preguntar cual se va a abrir
+    // Ninguna caja abierta: hay que preguntar cual se va a abrir primero
     tipoAAbrir = null;
     grupoTipo.style.display = 'block';
   } else {
-    // Ya hay una abierta: se abre directo la que falta, sin preguntar
+    // Ya hay una abierta: se abre directo la que falta, sin preguntar el tipo
     tipoAAbrir = hayMantenimientoAbierta ? 'foods' : 'mantenimiento';
     grupoTipo.style.display = 'none';
+    const ultima = await obtenerUltimaCerradaDeTipo(tipoAAbrir);
+    inputNumCaja.value = ultima ? (parseInt(ultima)+1) : '';
+    mostrarCamposNumFondo(tipoAAbrir);
   }
-  inputNumCaja.value = ultimaCajaCerrada ? (parseInt(ultimaCajaCerrada)+1) : '';
   panelAbrirCaja.style.display = 'block';
-  inputNumCaja.focus();
 });
 
-document.getElementById('btnAbrirComoMantenimiento').addEventListener('click', ()=>{
+document.getElementById('btnAbrirComoMantenimiento').addEventListener('click', async ()=>{
   tipoAAbrir = 'mantenimiento';
   document.getElementById('btnAbrirComoMantenimiento').classList.remove('secondary');
   document.getElementById('btnAbrirComoFoods').classList.add('secondary');
+  const ultima = await obtenerUltimaCerradaDeTipo('mantenimiento');
+  inputNumCaja.value = ultima ? (parseInt(ultima)+1) : '';
+  mostrarCamposNumFondo('mantenimiento');
+  inputNumCaja.focus();
 });
-document.getElementById('btnAbrirComoFoods').addEventListener('click', ()=>{
+document.getElementById('btnAbrirComoFoods').addEventListener('click', async ()=>{
   tipoAAbrir = 'foods';
   document.getElementById('btnAbrirComoFoods').classList.remove('secondary');
   document.getElementById('btnAbrirComoMantenimiento').classList.add('secondary');
+  const ultima = await obtenerUltimaCerradaDeTipo('foods');
+  inputNumCaja.value = ultima ? (parseInt(ultima)+1) : '';
+  mostrarCamposNumFondo('foods');
+  inputNumCaja.focus();
 });
 
 document.getElementById('btnCancelarAbrirCaja').addEventListener('click', ()=>{
