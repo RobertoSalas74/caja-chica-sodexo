@@ -164,7 +164,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       </div>
     </div>
     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-      <div class="actions" style="margin-top:0; gap:4px;">
+      <div class="actions" id="grupoBotonesTipo" style="margin-top:0; gap:4px; display:none;">
         <button id="btnTipoMantenimiento" style="padding:6px 14px; font-size:11px;">&#128295; Mantenimiento</button>
         <button id="btnTipoFoods" class="secondary" style="padding:6px 14px; font-size:11px;">&#127869; Foods</button>
       </div>
@@ -173,13 +173,20 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.15</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.16</div>
     </div>
   </header>
 
   <div class="panel" id="panelAbrirCaja" style="display:none; background:var(--accent-soft); border-color:var(--accent);">
     <h2 style="color:var(--accent); border-bottom-color:var(--accent);">Abrir Caja</h2>
     <div class="grid">
+      <div class="span2" id="grupoTipoAbrirCaja">
+        <label>&iquest;Qu&eacute; caja vas a abrir?</label>
+        <div class="actions" style="margin-top:6px;">
+          <button type="button" id="btnAbrirComoMantenimiento" style="flex:1; padding:10px;">&#128295; Mantenimiento</button>
+          <button type="button" id="btnAbrirComoFoods" class="secondary" style="flex:1; padding:10px;">&#127869; Foods</button>
+        </div>
+      </div>
       <div class="span2">
         <label for="inputNumCaja">N&deg; de Caja a trabajar</label>
         <input type="number" id="inputNumCaja" placeholder="Ej. 129">
@@ -578,13 +585,9 @@ function actualizarBadgeCaja(){
     cajaBadge.textContent = etiquetaTipo + ' — CAJA ' + cajaActiva;
     cajaBadge.style.background = '';
     btnCerrarCaja.disabled = false;
-    btnAbrirCaja.textContent = 'Caja abierta';
-    btnAbrirCaja.disabled = true;
   } else {
     cajaBadge.textContent = etiquetaTipo + ' — SIN CAJA ABIERTA';
     btnCerrarCaja.disabled = true;
-    btnAbrirCaja.textContent = 'Abrir Caja';
-    btnAbrirCaja.disabled = false;
   }
 }
 
@@ -619,10 +622,56 @@ async function cambiarTipoCajaActiva(nuevoTipo){
 document.getElementById('btnTipoMantenimiento').addEventListener('click', ()=>cambiarTipoCajaActiva('mantenimiento'));
 document.getElementById('btnTipoFoods').addEventListener('click', ()=>cambiarTipoCajaActiva('foods'));
 
-btnAbrirCaja.addEventListener('click', ()=>{
+// ── Saber cuales de las dos cajas (Mantenimiento/Foods) estan abiertas, para decidir si preguntar tipo o no ──
+let hayMantenimientoAbierta = false;
+let hayFoodsAbierta = false;
+let tipoAAbrir = null;
+
+function actualizarEstadoBotonAbrir(){
+  const ambasAbiertas = hayMantenimientoAbierta && hayFoodsAbierta;
+  btnAbrirCaja.disabled = ambasAbiertas;
+  btnAbrirCaja.textContent = ambasAbiertas ? 'Ambas cajas abiertas' : '\u{1F4BC} Abrir Caja';
+  document.getElementById('grupoBotonesTipo').style.display = ambasAbiertas ? 'flex' : 'none';
+}
+
+async function verificarCajasAbiertas(){
+  try{
+    const { data, error } = await supabaseClient.from('cajas').select('tipo').eq('estado','abierta');
+    if(error || !data) return;
+    hayMantenimientoAbierta = data.some(r=>r.tipo==='mantenimiento');
+    hayFoodsAbierta = data.some(r=>r.tipo==='foods');
+  } catch(e){ /* si falla, se asume lo que ya se sabe en memoria */ }
+  actualizarEstadoBotonAbrir();
+}
+
+btnAbrirCaja.addEventListener('click', async ()=>{
+  await verificarCajasAbiertas();
+  if(hayMantenimientoAbierta && hayFoodsAbierta) return; // no deberia poder llegar aqui, boton deshabilitado
+
+  const grupoTipo = document.getElementById('grupoTipoAbrirCaja');
+  if(!hayMantenimientoAbierta && !hayFoodsAbierta){
+    // Ninguna caja abierta: hay que preguntar cual se va a abrir
+    tipoAAbrir = null;
+    grupoTipo.style.display = 'block';
+  } else {
+    // Ya hay una abierta: se abre directo la que falta, sin preguntar
+    tipoAAbrir = hayMantenimientoAbierta ? 'foods' : 'mantenimiento';
+    grupoTipo.style.display = 'none';
+  }
   inputNumCaja.value = ultimaCajaCerrada ? (parseInt(ultimaCajaCerrada)+1) : '';
   panelAbrirCaja.style.display = 'block';
   inputNumCaja.focus();
+});
+
+document.getElementById('btnAbrirComoMantenimiento').addEventListener('click', ()=>{
+  tipoAAbrir = 'mantenimiento';
+  document.getElementById('btnAbrirComoMantenimiento').classList.remove('secondary');
+  document.getElementById('btnAbrirComoFoods').classList.add('secondary');
+});
+document.getElementById('btnAbrirComoFoods').addEventListener('click', ()=>{
+  tipoAAbrir = 'foods';
+  document.getElementById('btnAbrirComoFoods').classList.remove('secondary');
+  document.getElementById('btnAbrirComoMantenimiento').classList.add('secondary');
 });
 
 document.getElementById('btnCancelarAbrirCaja').addEventListener('click', ()=>{
@@ -632,10 +681,24 @@ document.getElementById('btnCancelarAbrirCaja').addEventListener('click', ()=>{
 document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async ()=>{
   const num = inputNumCaja.value.trim();
   if(!num){ inputNumCaja.focus(); return; }
+  if(!tipoAAbrir){
+    alert('Primero elige si vas a abrir la caja de Mantenimiento o de Foods.');
+    return;
+  }
+  // Si el tipo a abrir es distinto al que estabas viendo, cambia el contexto primero
+  if(tipoAAbrir !== cajaTipoActiva){
+    cajaTipoActiva = tipoAAbrir;
+    actualizarBotonesTipoCaja();
+    registros = []; registrosMov = []; movimientosBanco = []; saldoInicialBanco = 0; cajasCerradas = [];
+    repoblarSelectsPersonas();
+    if(typeof renderPersonasAdmin === 'function') renderPersonasAdmin();
+  }
   fondoFijoActivo = parseFloat(document.getElementById('inputFondoFijo').value) || 8000;
   cajaActiva = num;
   panelAbrirCaja.style.display = 'none';
   actualizarBadgeCaja();
+  renderTabla();
+  renderBancoEnVivo();
   // Sincronizar el N° Caja del formulario de Factura con la caja activa
   const fCajaInput = document.getElementById('fCaja');
   if(fCajaInput) fCajaInput.value = cajaActiva;
@@ -651,6 +714,7 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async
     cajaIdActual = null;
     console.warn('No se pudo crear la caja en Supabase, seguira solo en memoria:', e.message);
   }
+  await verificarCajasAbiertas();
 });
 
 // Historial de cajas cerradas: {numero, monto, fecha} — alimenta la Seccion 4 del Arqueo
@@ -689,6 +753,7 @@ btnCerrarCaja.addEventListener('click', async ()=>{
     renderBancoEnVivo();
     renderTabla();
     actualizarBadgeCaja();
+    await verificarCajasAbiertas();
   }
 });
 
@@ -1927,7 +1992,18 @@ async function restaurarCajaDesdeSupabase(){
     }
   } catch(e){ console.warn('No se pudo restaurar la caja desde Supabase, se sigue en memoria vacia:', e.message); }
 }
-restaurarCajaDesdeSupabase();
+
+// ── Al cargar la app: ver que cajas hay abiertas, elegir el contexto correcto y restaurar su detalle ──
+async function inicializarEstadoCajas(){
+  await verificarCajasAbiertas();
+  if(hayMantenimientoAbierta && !hayFoodsAbierta) cajaTipoActiva = 'mantenimiento';
+  else if(hayFoodsAbierta && !hayMantenimientoAbierta) cajaTipoActiva = 'foods';
+  // si ambas o ninguna estan abiertas, se queda en 'mantenimiento' por defecto
+  actualizarBotonesTipoCaja();
+  await restaurarCajaDesdeSupabase();
+  repoblarSelectsPersonas();
+}
+inicializarEstadoCajas();
 
 document.getElementById('btnActualizarPersonas').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnActualizarPersonas');
