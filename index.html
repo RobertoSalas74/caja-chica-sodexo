@@ -164,12 +164,16 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       </div>
     </div>
     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+      <div class="actions" style="margin-top:0; gap:4px;">
+        <button id="btnTipoMantenimiento" style="padding:6px 14px; font-size:11px;">&#128295; Mantenimiento</button>
+        <button id="btnTipoFoods" class="secondary" style="padding:6px 14px; font-size:11px;">&#127869; Foods</button>
+      </div>
       <div class="caja-badge" id="cajaBadge">SIN CAJA ABIERTA</div>
       <div class="actions" style="margin-top:0; gap:6px;">
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.14</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.15</div>
     </div>
   </header>
 
@@ -179,6 +183,10 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       <div class="span2">
         <label for="inputNumCaja">N&deg; de Caja a trabajar</label>
         <input type="number" id="inputNumCaja" placeholder="Ej. 129">
+      </div>
+      <div class="span2">
+        <label for="inputFondoFijo">Fondo Fijo asignado (S/)</label>
+        <input type="number" id="inputFondoFijo" placeholder="Ej. 8000" value="8000">
       </div>
     </div>
     <div class="actions">
@@ -555,7 +563,8 @@ let registrosMov = [];   // registros modo "movilidad" -> Gasto/Refact
 let cajaActiva = null;        // numero de la caja abierta actualmente (null = sin caja abierta)
 let ultimaCajaCerrada = null; // ultimo numero cerrado, para sugerir el siguiente al reabrir
 let cajaIdActual = null;      // id (uuid) de la fila en Supabase "cajas" — null si no hay caja abierta o no se pudo sincronizar
-let fondoFijoActivo = 8000;   // fondo fijo de la caja abierta (por ahora fijo para Mantenimiento)
+let fondoFijoActivo = 8000;   // fondo fijo de la caja abierta
+let cajaTipoActiva = 'mantenimiento'; // 'mantenimiento' | 'foods' — que caja se esta trabajando ahora
 
 const cajaBadge = document.getElementById('cajaBadge');
 const btnAbrirCaja = document.getElementById('btnAbrirCaja');
@@ -564,19 +573,51 @@ const panelAbrirCaja = document.getElementById('panelAbrirCaja');
 const inputNumCaja = document.getElementById('inputNumCaja');
 
 function actualizarBadgeCaja(){
+  const etiquetaTipo = cajaTipoActiva === 'foods' ? 'FOODS' : 'MANTENIMIENTO';
   if(cajaActiva){
-    cajaBadge.textContent = 'CAJA ' + cajaActiva;
+    cajaBadge.textContent = etiquetaTipo + ' — CAJA ' + cajaActiva;
     cajaBadge.style.background = '';
     btnCerrarCaja.disabled = false;
     btnAbrirCaja.textContent = 'Caja abierta';
     btnAbrirCaja.disabled = true;
   } else {
-    cajaBadge.textContent = 'SIN CAJA ABIERTA';
+    cajaBadge.textContent = etiquetaTipo + ' — SIN CAJA ABIERTA';
     btnCerrarCaja.disabled = true;
     btnAbrirCaja.textContent = 'Abrir Caja';
     btnAbrirCaja.disabled = false;
   }
 }
+
+function actualizarBotonesTipoCaja(){
+  const btnMtto = document.getElementById('btnTipoMantenimiento');
+  const btnFoods = document.getElementById('btnTipoFoods');
+  if(cajaTipoActiva === 'foods'){
+    btnFoods.classList.remove('secondary');
+    btnMtto.classList.add('secondary');
+  } else {
+    btnMtto.classList.remove('secondary');
+    btnFoods.classList.add('secondary');
+  }
+}
+
+async function cambiarTipoCajaActiva(nuevoTipo){
+  if(nuevoTipo === cajaTipoActiva) return;
+  cajaTipoActiva = nuevoTipo;
+  actualizarBotonesTipoCaja();
+  // Limpiar todo el estado en memoria antes de cargar el de la otra caja
+  cajaActiva = null; cajaIdActual = null; ultimaCajaCerrada = null;
+  registros = []; registrosMov = []; movimientosBanco = []; saldoInicialBanco = 0; cajasCerradas = [];
+  fondoFijoActivo = 8000;
+  actualizarBadgeCaja();
+  renderTabla();
+  renderBancoEnVivo();
+  await restaurarCajaDesdeSupabase();
+  repoblarSelectsPersonas();
+  if(typeof renderPersonasAdmin === 'function') renderPersonasAdmin();
+}
+
+document.getElementById('btnTipoMantenimiento').addEventListener('click', ()=>cambiarTipoCajaActiva('mantenimiento'));
+document.getElementById('btnTipoFoods').addEventListener('click', ()=>cambiarTipoCajaActiva('foods'));
 
 btnAbrirCaja.addEventListener('click', ()=>{
   inputNumCaja.value = ultimaCajaCerrada ? (parseInt(ultimaCajaCerrada)+1) : '';
@@ -591,6 +632,7 @@ document.getElementById('btnCancelarAbrirCaja').addEventListener('click', ()=>{
 document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async ()=>{
   const num = inputNumCaja.value.trim();
   if(!num){ inputNumCaja.focus(); return; }
+  fondoFijoActivo = parseFloat(document.getElementById('inputFondoFijo').value) || 8000;
   cajaActiva = num;
   panelAbrirCaja.style.display = 'none';
   actualizarBadgeCaja();
@@ -601,7 +643,7 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async
   // Crear la fila en Supabase para persistir esta caja (si falla, la app sigue funcionando solo en memoria)
   try{
     const { data, error } = await supabaseClient.from('cajas').insert({
-      tipo: 'mantenimiento', numero: cajaActiva, fondo_fijo: fondoFijoActivo, estado: 'abierta'
+      tipo: cajaTipoActiva, numero: cajaActiva, fondo_fijo: fondoFijoActivo, estado: 'abierta'
     }).select('id').single();
     if(error) throw error;
     cajaIdActual = data.id;
@@ -659,6 +701,25 @@ function poblarSelect(id, opciones){
     opt.value = o; opt.textContent = o;
     sel.appendChild(opt);
   });
+}
+// ── Personal por tipo de caja: Mantenimiento usa SOLICITANTES/PERSONAS_DATA base, Foods empieza vacio ──
+let SOLICITANTES_FOODS = [];
+let PERSONAS_DATA_FOODS = {};
+
+function listasActivas(){
+  return cajaTipoActiva === 'foods'
+    ? { nombres: SOLICITANTES_FOODS, datos: PERSONAS_DATA_FOODS }
+    : { nombres: SOLICITANTES, datos: PERSONAS_DATA };
+}
+
+function repoblarSelectsPersonas(){
+  ['fSolicitante','mSolicitante'].forEach(id=>{
+    const sel = document.getElementById(id);
+    while(sel.options.length>1) sel.remove(1);
+  });
+  const { nombres } = listasActivas();
+  poblarSelect('fSolicitante', nombres);
+  poblarSelect('mSolicitante', nombres);
 }
 poblarSelect('fSolicitante', SOLICITANTES);
 poblarSelect('fCuenta', CUENTAS);
@@ -1797,13 +1858,22 @@ async function cargarFirmasPermanentes(){
     const { data, error } = await supabaseClient.from('firmas_personas').select('*');
     if(error || !data) return;
     data.forEach(f=>{
-      PERSONAS_DATA[f.nombre] = { dni: f.dni || '', firma: f.firma_base64, fw: f.fw, fh: f.fh };
-      if(!SOLICITANTES.includes(f.nombre)){
-        SOLICITANTES.push(f.nombre);
-        poblarSelect('fSolicitante', [f.nombre]);
-        poblarSelect('mSolicitante', [f.nombre]);
+      const persona = { dni: f.dni || '', firma: f.firma_base64, fw: f.fw, fh: f.fh };
+      const tipo = f.tipo_caja || 'mantenimiento';
+      if(tipo === 'foods'){
+        PERSONAS_DATA_FOODS[f.nombre] = persona;
+        if(!SOLICITANTES_FOODS.includes(f.nombre)) SOLICITANTES_FOODS.push(f.nombre);
+      } else if(tipo === 'ambas'){
+        PERSONAS_DATA[f.nombre] = persona;
+        PERSONAS_DATA_FOODS[f.nombre] = persona;
+        if(!SOLICITANTES.includes(f.nombre)) SOLICITANTES.push(f.nombre);
+        if(!SOLICITANTES_FOODS.includes(f.nombre)) SOLICITANTES_FOODS.push(f.nombre);
+      } else {
+        PERSONAS_DATA[f.nombre] = persona;
+        if(!SOLICITANTES.includes(f.nombre)) SOLICITANTES.push(f.nombre);
       }
     });
+    repoblarSelectsPersonas();
   } catch(e){ /* si falla, simplemente se sigue con las firmas ya cargadas */ }
 }
 cargarFirmasPermanentes();
@@ -1812,11 +1882,11 @@ cargarFirmasPermanentes();
 async function restaurarCajaDesdeSupabase(){
   try{
     const { data: abiertas, error: errAbiertas } = await supabaseClient.from('cajas')
-      .select('*').eq('tipo','mantenimiento').eq('estado','abierta').order('created_at',{ascending:false}).limit(1);
+      .select('*').eq('tipo',cajaTipoActiva).eq('estado','abierta').order('created_at',{ascending:false}).limit(1);
     if(errAbiertas) throw errAbiertas;
 
     const { data: cerradas, error: errCerradas } = await supabaseClient.from('cajas')
-      .select('*').eq('tipo','mantenimiento').eq('estado','cerrada').order('fecha_cierre',{ascending:false});
+      .select('*').eq('tipo',cajaTipoActiva).eq('estado','cerrada').order('fecha_cierre',{ascending:false});
     if(!errCerradas && cerradas){
       cajasCerradas = cerradas.map(c=>({ numero: c.numero, monto: parseFloat(c.monto_cierre)||0, fecha: c.fecha_cierre }));
       if(cerradas.length>0) ultimaCajaCerrada = cerradas[0].numero;
@@ -2114,13 +2184,14 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
 // ── Administrar Personas (nombre, DNI, firma) ──
 function renderPersonasAdmin(){
   const cont = document.getElementById('listaPersonasAdmin');
-  const nombres = Object.keys(PERSONAS_DATA).sort();
+  const { datos } = listasActivas();
+  const nombres = Object.keys(datos).sort();
   if(nombres.length===0){
-    cont.innerHTML = '<div class="empty-state">A\u00fan no hay personas registradas.</div>';
+    cont.innerHTML = `<div class="empty-state">A\u00fan no hay personas registradas para ${cajaTipoActiva==='foods'?'Foods':'Mantenimiento'}.</div>`;
     return;
   }
   cont.innerHTML = nombres.map(nombre=>{
-    const p = PERSONAS_DATA[nombre];
+    const p = datos[nombre];
     const firmaImg = p.firma
       ? `<div style="width:70px; height:40px; display:flex; align-items:center; justify-content:center; background:#fff; border:1px solid var(--line); border-radius:2px; overflow:hidden; flex-shrink:0;"><img src="data:image/png;base64,${p.firma}" style="max-width:100%; max-height:100%; object-fit:contain;"></div>`
       : `<div style="width:70px; height:40px; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><span style="font-size:10px; color:#9a9280;">Sin firma</span></div>`;
@@ -2142,10 +2213,12 @@ async function guardarPersona(nombreOriginal, idSafe){
   const nuevoDni = document.getElementById(`pdni_${idSafe}`).value.trim();
   const archivoFirma = document.getElementById(`pfirma_${idSafe}`).files[0];
   if(!nuevoNombre) return;
+  const { datos } = listasActivas();
+  const listaNombres = cajaTipoActiva==='foods' ? SOLICITANTES_FOODS : SOLICITANTES;
 
-  let firmaBase64 = PERSONAS_DATA[nombreOriginal].firma;
-  let fw = PERSONAS_DATA[nombreOriginal].fw;
-  let fh = PERSONAS_DATA[nombreOriginal].fh;
+  let firmaBase64 = datos[nombreOriginal].firma;
+  let fw = datos[nombreOriginal].fw;
+  let fh = datos[nombreOriginal].fh;
 
   if(archivoFirma){
     firmaBase64 = await new Promise((resolve)=>{
@@ -2162,14 +2235,15 @@ async function guardarPersona(nombreOriginal, idSafe){
   }
 
   try{
-    await supabaseClient.from('firmas_personas').upsert({ nombre: nuevoNombre, dni: nuevoDni, firma_base64: firmaBase64, fw, fh });
+    await supabaseClient.from('firmas_personas').upsert({ nombre: nuevoNombre, dni: nuevoDni, firma_base64: firmaBase64, fw, fh, tipo_caja: cajaTipoActiva });
     if(nuevoNombre !== nombreOriginal){
       await supabaseClient.from('firmas_personas').delete().eq('nombre', nombreOriginal);
-      delete PERSONAS_DATA[nombreOriginal];
-      const idxS = SOLICITANTES.indexOf(nombreOriginal);
-      if(idxS>-1) SOLICITANTES.splice(idxS,1,nuevoNombre); else SOLICITANTES.push(nuevoNombre);
+      delete datos[nombreOriginal];
+      const idxS = listaNombres.indexOf(nombreOriginal);
+      if(idxS>-1) listaNombres.splice(idxS,1,nuevoNombre); else listaNombres.push(nuevoNombre);
     }
-    PERSONAS_DATA[nuevoNombre] = { dni: nuevoDni, firma: firmaBase64, fw, fh };
+    datos[nuevoNombre] = { dni: nuevoDni, firma: firmaBase64, fw, fh };
+    repoblarSelectsPersonas();
     renderPersonasAdmin();
     alert('Persona guardada correctamente.');
   } catch(err){
@@ -2179,11 +2253,14 @@ async function guardarPersona(nombreOriginal, idSafe){
 
 async function eliminarPersona(nombre){
   if(!confirm(`\u00bfEliminar a ${nombre}? Esto la quita de la base de datos permanente. Si es una de las personas originales, podr\u00eda volver a aparecer al recargar la p\u00e1gina (est\u00e1 tambi\u00e9n guardada en el c\u00f3digo base).`)) return;
+  const { datos } = listasActivas();
+  const listaNombres = cajaTipoActiva==='foods' ? SOLICITANTES_FOODS : SOLICITANTES;
   try{
     await supabaseClient.from('firmas_personas').delete().eq('nombre', nombre);
-    delete PERSONAS_DATA[nombre];
-    const idxS = SOLICITANTES.indexOf(nombre);
-    if(idxS>-1) SOLICITANTES.splice(idxS,1);
+    delete datos[nombre];
+    const idxS = listaNombres.indexOf(nombre);
+    if(idxS>-1) listaNombres.splice(idxS,1);
+    repoblarSelectsPersonas();
     renderPersonasAdmin();
   } catch(err){
     alert('Error al eliminar: ' + err.message);
@@ -2195,6 +2272,8 @@ document.getElementById('btnAgregarPersona').addEventListener('click', async ()=
   const dni = document.getElementById('nuevaPersonaDni').value.trim();
   const archivo = document.getElementById('nuevaPersonaFirma').files[0];
   if(!nombre) return;
+  const { datos } = listasActivas();
+  const listaNombres = cajaTipoActiva==='foods' ? SOLICITANTES_FOODS : SOLICITANTES;
 
   let firmaBase64 = null, fw = 0, fh = 0;
   if(archivo){
@@ -2212,12 +2291,13 @@ document.getElementById('btnAgregarPersona').addEventListener('click', async ()=
   }
 
   try{
-    await supabaseClient.from('firmas_personas').upsert({ nombre, dni, firma_base64: firmaBase64||'', fw, fh });
-    PERSONAS_DATA[nombre] = { dni, firma: firmaBase64, fw, fh };
-    if(!SOLICITANTES.includes(nombre)) SOLICITANTES.push(nombre);
+    await supabaseClient.from('firmas_personas').upsert({ nombre, dni, firma_base64: firmaBase64||'', fw, fh, tipo_caja: cajaTipoActiva });
+    datos[nombre] = { dni, firma: firmaBase64, fw, fh };
+    if(!listaNombres.includes(nombre)) listaNombres.push(nombre);
     document.getElementById('nuevaPersonaNombre').value='';
     document.getElementById('nuevaPersonaDni').value='';
     document.getElementById('nuevaPersonaFirma').value='';
+    repoblarSelectsPersonas();
     renderPersonasAdmin();
   } catch(err){
     alert('Error al agregar: ' + err.message);
