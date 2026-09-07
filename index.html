@@ -169,7 +169,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.13</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.14</div>
     </div>
   </header>
 
@@ -554,6 +554,8 @@ let registrosMov = [];   // registros modo "movilidad" -> Gasto/Refact
 // ── Sistema de Abrir/Cerrar Caja con contador automático ──
 let cajaActiva = null;        // numero de la caja abierta actualmente (null = sin caja abierta)
 let ultimaCajaCerrada = null; // ultimo numero cerrado, para sugerir el siguiente al reabrir
+let cajaIdActual = null;      // id (uuid) de la fila en Supabase "cajas" — null si no hay caja abierta o no se pudo sincronizar
+let fondoFijoActivo = 8000;   // fondo fijo de la caja abierta (por ahora fijo para Mantenimiento)
 
 const cajaBadge = document.getElementById('cajaBadge');
 const btnAbrirCaja = document.getElementById('btnAbrirCaja');
@@ -586,7 +588,7 @@ document.getElementById('btnCancelarAbrirCaja').addEventListener('click', ()=>{
   panelAbrirCaja.style.display = 'none';
 });
 
-document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', ()=>{
+document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async ()=>{
   const num = inputNumCaja.value.trim();
   if(!num){ inputNumCaja.focus(); return; }
   cajaActiva = num;
@@ -595,12 +597,24 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', ()=>{
   // Sincronizar el N° Caja del formulario de Factura con la caja activa
   const fCajaInput = document.getElementById('fCaja');
   if(fCajaInput) fCajaInput.value = cajaActiva;
+
+  // Crear la fila en Supabase para persistir esta caja (si falla, la app sigue funcionando solo en memoria)
+  try{
+    const { data, error } = await supabaseClient.from('cajas').insert({
+      tipo: 'mantenimiento', numero: cajaActiva, fondo_fijo: fondoFijoActivo, estado: 'abierta'
+    }).select('id').single();
+    if(error) throw error;
+    cajaIdActual = data.id;
+  } catch(e){
+    cajaIdActual = null;
+    console.warn('No se pudo crear la caja en Supabase, seguira solo en memoria:', e.message);
+  }
 });
 
 // Historial de cajas cerradas: {numero, monto, fecha} — alimenta la Seccion 4 del Arqueo
 let cajasCerradas = [];
 
-btnCerrarCaja.addEventListener('click', ()=>{
+btnCerrarCaja.addEventListener('click', async ()=>{
   if(!cajaActiva) return;
   const totalComprobantes = registros.reduce((s,r)=>s+r.total,0);
   const totalVales = registrosMov.reduce((s,r)=>s+r.total,0);
@@ -610,6 +624,14 @@ btnCerrarCaja.addEventListener('click', ()=>{
     // Descargar el historial de Banco en Vivo de esta caja antes de limpiarlo (mientras cajaActiva aun tiene el numero correcto)
     if(movimientosBanco.length>0 || saldoInicialBanco!==0) descargarHistorialBancoCSV();
 
+    if(cajaIdActual){
+      try{
+        await supabaseClient.from('cajas').update({
+          estado: 'cerrada', fecha_cierre: new Date().toISOString().slice(0,10), monto_cierre: montoCierre
+        }).eq('id', cajaIdActual);
+      } catch(e){ console.warn('No se pudo marcar la caja como cerrada en Supabase:', e.message); }
+    }
+
     cajasCerradas.push({
       numero: cajaActiva,
       monto: montoCierre,
@@ -617,6 +639,7 @@ btnCerrarCaja.addEventListener('click', ()=>{
     });
     ultimaCajaCerrada = cajaActiva;
     cajaActiva = null;
+    cajaIdActual = null;
     registros = [];       // el detalle desaparece al cerrar (solo queda el resumen)
     registrosMov = [];
     saldoInicialBanco = 0;  // Banco en Vivo se reinicia para la proxima caja
@@ -791,18 +814,28 @@ function eliminarMovimientoBanco(i){
   renderBancoEnVivo();
 }
 
-document.getElementById('btnEstablecerSaldoInicial').addEventListener('click', ()=>{
+document.getElementById('btnEstablecerSaldoInicial').addEventListener('click', async ()=>{
   saldoInicialBanco = parseFloat(document.getElementById('bancoSaldoInicial').value)||0;
   renderBancoEnVivo();
+  if(cajaIdActual){
+    try{
+      await supabaseClient.from('cajas').update({ saldo_inicial_banco: saldoInicialBanco }).eq('id', cajaIdActual);
+    } catch(e){ console.warn('No se pudo sincronizar el saldo inicial con Supabase:', e.message); }
+  }
 });
 
-document.getElementById('btnAgregarMovimientoBanco').addEventListener('click', ()=>{
+document.getElementById('btnAgregarMovimientoBanco').addEventListener('click', async ()=>{
   const fecha = document.getElementById('bancoMovFecha').value;
   const tipo = document.getElementById('bancoMovTipo').value;
   const descripcion = document.getElementById('bancoMovDescripcion').value.trim();
   const monto = parseFloat(document.getElementById('bancoMovMonto').value)||0;
   if(!fecha || !descripcion || !monto) return;
   movimientosBanco.push({fecha, tipo, descripcion, monto});
+  if(cajaIdActual){
+    try{
+      await supabaseClient.from('movimientos_banco').insert({ caja_id: cajaIdActual, fecha, tipo, descripcion, monto });
+    } catch(e){ console.warn('No se pudo sincronizar el movimiento de banco con Supabase:', e.message); }
+  }
   document.getElementById('bancoMovDescripcion').value='';
   document.getElementById('bancoMovMonto').value='';
   renderBancoEnVivo();
@@ -854,7 +887,7 @@ function showAlert(box, msg){
   setTimeout(()=>box.classList.remove('show'), 4500);
 }
 
-document.getElementById('btnAgregarFactura').addEventListener('click', ()=>{
+document.getElementById('btnAgregarFactura').addEventListener('click', async ()=>{
   if(!cajaActiva){
     showAlert(alertBoxFactura, 'Primero debes abrir una caja (bot\u00f3n "Abrir Caja" arriba) antes de registrar gastos.');
     return;
@@ -875,6 +908,13 @@ document.getElementById('btnAgregarFactura').addEventListener('click', ()=>{
     unidad:'SOLES', cantidad, precio, sinIgv: total/1.18, total, tipo, cuenta, serviceCat,
     evidencia: evidenciaFacturaActual
   });
+  if(cajaIdActual){
+    try{
+      await supabaseClient.from('comprobantes').insert({
+        caja_id: cajaIdActual, fecha, descripcion, documento, importe: total
+      });
+    } catch(e){ console.warn('No se pudo sincronizar el comprobante con Supabase:', e.message); }
+  }
   evidenciaFacturaActual = null;
   renderTabla();
   limpiarFormularioFactura();
@@ -910,7 +950,7 @@ function actualizarAfectoMov(){
 }
 mMonto.addEventListener('input', actualizarAfectoMov);
 
-document.getElementById('btnAgregarMovilidad').addEventListener('click', ()=>{
+document.getElementById('btnAgregarMovilidad').addEventListener('click', async ()=>{
   if(!cajaActiva){
     showAlert(alertBoxMovilidad, 'Primero debes abrir una caja (bot\u00f3n "Abrir Caja" arriba) antes de registrar gastos.');
     return;
@@ -933,6 +973,13 @@ document.getElementById('btnAgregarMovilidad').addEventListener('click', ()=>{
   const fotoManual = fotoValeBase64 ? { firma: fotoValeBase64, fw: fotoValeDims.w, fh: fotoValeDims.h } : null;
 
   registrosMov.push({ fecha, dni, solicitante, tipo, descripcion, origenDestino, total, afecto, inafecto, fotoManual, evidencia: evidenciaMovilidadActual });
+  if(cajaIdActual){
+    try{
+      await supabaseClient.from('vales_movilidad').insert({
+        caja_id: cajaIdActual, fecha, solicitante, dni, motivo: descripcion, origen_destino: origenDestino, importe: total
+      });
+    } catch(e){ console.warn('No se pudo sincronizar el vale con Supabase:', e.message); }
+  }
   evidenciaMovilidadActual = null;
   renderTabla();
   limpiarFormularioMovilidad();
@@ -1761,6 +1808,57 @@ async function cargarFirmasPermanentes(){
 }
 cargarFirmasPermanentes();
 
+// ── Restaurar la caja abierta (si la hay) y su historial desde Supabase al cargar la app ──
+async function restaurarCajaDesdeSupabase(){
+  try{
+    const { data: abiertas, error: errAbiertas } = await supabaseClient.from('cajas')
+      .select('*').eq('tipo','mantenimiento').eq('estado','abierta').order('created_at',{ascending:false}).limit(1);
+    if(errAbiertas) throw errAbiertas;
+
+    const { data: cerradas, error: errCerradas } = await supabaseClient.from('cajas')
+      .select('*').eq('tipo','mantenimiento').eq('estado','cerrada').order('fecha_cierre',{ascending:false});
+    if(!errCerradas && cerradas){
+      cajasCerradas = cerradas.map(c=>({ numero: c.numero, monto: parseFloat(c.monto_cierre)||0, fecha: c.fecha_cierre }));
+      if(cerradas.length>0) ultimaCajaCerrada = cerradas[0].numero;
+    }
+
+    if(abiertas && abiertas.length>0){
+      const c = abiertas[0];
+      cajaActiva = c.numero;
+      cajaIdActual = c.id;
+      fondoFijoActivo = parseFloat(c.fondo_fijo)||8000;
+      saldoInicialBanco = parseFloat(c.saldo_inicial_banco)||0;
+      const fCajaInput = document.getElementById('fCaja');
+      if(fCajaInput) fCajaInput.value = cajaActiva;
+      actualizarBadgeCaja();
+
+      const [{ data: comp }, { data: vales }, { data: movBanco }] = await Promise.all([
+        supabaseClient.from('comprobantes').select('*').eq('caja_id', c.id).order('fecha',{ascending:true}),
+        supabaseClient.from('vales_movilidad').select('*').eq('caja_id', c.id).order('fecha',{ascending:true}),
+        supabaseClient.from('movimientos_banco').select('*').eq('caja_id', c.id).order('fecha',{ascending:true})
+      ]);
+
+      if(comp) registros = comp.map(r=>({
+        caja: c.numero, site:'SANTA CLARA', fecha:r.fecha, solicitante:'', documento:r.documento||'',
+        descripcion:r.descripcion, detalle:'', unidad:'SOLES', cantidad:1, precio:parseFloat(r.importe),
+        sinIgv: parseFloat(r.importe)/1.18, total:parseFloat(r.importe), tipo:'', cuenta:'', serviceCat:'',
+        evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null
+      }));
+      if(vales) registrosMov = vales.map(r=>{
+        const total = parseFloat(r.importe);
+        return { fecha:r.fecha, dni:r.dni||'', solicitante:r.solicitante, tipo:'', descripcion:r.motivo||'',
+          origenDestino:r.origen_destino||'', total, afecto: Math.min(total,AFECTO_LIMITE), inafecto: Math.max(0,total-AFECTO_LIMITE),
+          fotoManual:null, evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null };
+      });
+      if(movBanco) movimientosBanco = movBanco.map(m=>({ fecha:m.fecha, tipo:m.tipo, descripcion:m.descripcion, monto:parseFloat(m.monto) }));
+
+      renderTabla();
+      renderBancoEnVivo();
+    }
+  } catch(e){ console.warn('No se pudo restaurar la caja desde Supabase, se sigue en memoria vacia:', e.message); }
+}
+restaurarCajaDesdeSupabase();
+
 document.getElementById('btnActualizarPersonas').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnActualizarPersonas');
   btn.disabled = true; btn.textContent = 'Actualizando...';
@@ -1910,7 +2008,7 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
   const totalPendientes = cajasCerradas.reduce((s,c)=>s+c.monto,0);
   const saldoBanco = calcularSaldoActualBanco();
   const totalEfectivo = saldoBanco; // billetes/monedas fisicos se cuentan en 0 hasta que se ingresen manualmente
-  const fondoFijo = 8000;
+  const fondoFijo = fondoFijoActivo;
   const importeTotal = totalComprobantes + totalVales + totalPendientes;
   const diferencia = importeTotal - fondoFijo;
 
