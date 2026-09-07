@@ -173,7 +173,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.17</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.18</div>
     </div>
   </header>
 
@@ -220,6 +220,15 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   <div class="panel" id="panelPersonas" style="display:none;">
     <h2>Administrar Personas <button class="secondary" id="btnCambiarModo4" style="float:right; padding:4px 10px;">&larr; Cambiar</button></h2>
+
+    <div style="background:var(--accent-soft); border:1px solid var(--accent); border-radius:4px; padding:12px; margin-bottom:16px;">
+      <label for="inputAutorizante" style="display:block; margin-bottom:6px;">Autorizante de Vales (aparece en el Arqueo)</label>
+      <div class="actions" style="margin-top:0;">
+        <input type="text" id="inputAutorizante" placeholder="Ej. CARLOS HIGA" style="flex:1;">
+        <button id="btnGuardarAutorizante" style="padding:8px 14px; font-size:12px;">Guardar</button>
+      </div>
+    </div>
+
     <p style="font-size:13px; margin:0 0 14px; color:#6b6255;">
       Edita el nombre, DNI o firma de cada persona. Los cambios se guardan de inmediato y quedan
       disponibles la pr&oacute;xima vez que la uses en un Vale de Movilidad.
@@ -576,6 +585,7 @@ let ultimaCajaCerrada = null; // ultimo numero cerrado, para sugerir el siguient
 let cajaIdActual = null;      // id (uuid) de la fila en Supabase "cajas" — null si no hay caja abierta o no se pudo sincronizar
 let fondoFijoActivo = 8000;   // fondo fijo de la caja abierta
 let cajaTipoActiva = 'mantenimiento'; // 'mantenimiento' | 'foods' — que caja se esta trabajando ahora
+let autorizanteActual = 'CARLOS HIGA'; // editable desde Administrar Personas, se usa en el Arqueo
 
 const cajaBadge = document.getElementById('cajaBadge');
 const btnAbrirCaja = document.getElementById('btnAbrirCaja');
@@ -969,7 +979,12 @@ function renderBancoEnVivo(){
     </div>`;
 }
 
-function eliminarMovimientoBanco(i){
+async function eliminarMovimientoBanco(i){
+  const mov = movimientosBanco[i];
+  if(mov && mov.id){
+    try{ await supabaseClient.from('movimientos_banco').delete().eq('id', mov.id); }
+    catch(e){ console.warn('No se pudo borrar el movimiento en Supabase:', e.message); }
+  }
   movimientosBanco.splice(i,1);
   renderBancoEnVivo();
 }
@@ -990,10 +1005,13 @@ document.getElementById('btnAgregarMovimientoBanco').addEventListener('click', a
   const descripcion = document.getElementById('bancoMovDescripcion').value.trim();
   const monto = parseFloat(document.getElementById('bancoMovMonto').value)||0;
   if(!fecha || !descripcion || !monto) return;
-  movimientosBanco.push({fecha, tipo, descripcion, monto});
+  const mov = {fecha, tipo, descripcion, monto, id: null};
+  movimientosBanco.push(mov);
   if(cajaIdActual){
     try{
-      await supabaseClient.from('movimientos_banco').insert({ caja_id: cajaIdActual, fecha, tipo, descripcion, monto });
+      const { data, error } = await supabaseClient.from('movimientos_banco')
+        .insert({ caja_id: cajaIdActual, fecha, tipo, descripcion, monto }).select('id').single();
+      if(!error && data) mov.id = data.id;
     } catch(e){ console.warn('No se pudo sincronizar el movimiento de banco con Supabase:', e.message); }
   }
   document.getElementById('bancoMovDescripcion').value='';
@@ -1070,8 +1088,9 @@ document.getElementById('btnAgregarFactura').addEventListener('click', async ()=
   });
   if(cajaIdActual){
     try{
+      const evidenciaUrl = await subirEvidenciaAStorage(evidenciaFacturaActual, 'comprobantes');
       await supabaseClient.from('comprobantes').insert({
-        caja_id: cajaIdActual, fecha, descripcion, documento, importe: total
+        caja_id: cajaIdActual, fecha, descripcion, documento, importe: total, evidencia_url: evidenciaUrl
       });
     } catch(e){ console.warn('No se pudo sincronizar el comprobante con Supabase:', e.message); }
   }
@@ -1135,8 +1154,9 @@ document.getElementById('btnAgregarMovilidad').addEventListener('click', async (
   registrosMov.push({ fecha, dni, solicitante, tipo, descripcion, origenDestino, total, afecto, inafecto, fotoManual, evidencia: evidenciaMovilidadActual });
   if(cajaIdActual){
     try{
+      const evidenciaUrl = await subirEvidenciaAStorage(evidenciaMovilidadActual, 'vales');
       await supabaseClient.from('vales_movilidad').insert({
-        caja_id: cajaIdActual, fecha, solicitante, dni, motivo: descripcion, origen_destino: origenDestino, importe: total
+        caja_id: cajaIdActual, fecha, solicitante, dni, motivo: descripcion, origen_destino: origenDestino, importe: total, autorizante: autorizanteActual, evidencia_url: evidenciaUrl
       });
     } catch(e){ console.warn('No se pudo sincronizar el vale con Supabase:', e.message); }
   }
@@ -1749,6 +1769,24 @@ async function leerDocumentoConIA(file, tipoDoc){
   };
 }
 
+// ── Subir evidencia (foto/PDF) al bucket de Storage, devuelve la URL publica en vez de guardar el base64 en la fila ──
+async function subirEvidenciaAStorage(evidencia, carpeta){
+  if(!evidencia || !evidencia.dataUrl) return null;
+  try{
+    const resp = await fetch(evidencia.dataUrl);
+    const blob = await resp.blob();
+    const ext = (evidencia.tipo && evidencia.tipo.includes('pdf')) ? 'pdf' : 'jpg';
+    const nombreArchivo = `${carpeta}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const { error } = await supabaseClient.storage.from('evidencias').upload(nombreArchivo, blob, { contentType: evidencia.tipo || 'image/jpeg' });
+    if(error) throw error;
+    const { data } = supabaseClient.storage.from('evidencias').getPublicUrl(nombreArchivo);
+    return data.publicUrl;
+  } catch(e){
+    console.warn('No se pudo subir la evidencia a Storage, se guarda sin evidencia en Supabase:', e.message);
+    return null;
+  }
+}
+
 let evidenciaFacturaActual = null; // dataURL de la foto/PDF cargado, para "Ver documento" despues
 let evidenciaMovilidadActual = null;
 
@@ -1952,6 +1990,31 @@ document.getElementById('logoSodexoHeader').src = 'data:image/png;base64,' + LOG
 recalcularFactura();
 
 // ── Cargar firmas permanentes guardadas desde el celular (se fusionan con las 11 base) ──
+// ── Autorizante configurable (aparece en el Arqueo, editable desde Administrar Personas) ──
+async function cargarAutorizante(){
+  try{
+    const { data, error } = await supabaseClient.from('configuracion').select('valor').eq('clave','autorizante').single();
+    if(!error && data && data.valor){
+      autorizanteActual = data.valor;
+      const input = document.getElementById('inputAutorizante');
+      if(input) input.value = autorizanteActual;
+    }
+  } catch(e){ /* si falla, se sigue con el valor por defecto */ }
+}
+cargarAutorizante();
+
+document.getElementById('btnGuardarAutorizante').addEventListener('click', async ()=>{
+  const nuevo = document.getElementById('inputAutorizante').value.trim().toUpperCase();
+  if(!nuevo) return;
+  try{
+    await supabaseClient.from('configuracion').upsert({ clave: 'autorizante', valor: nuevo, updated_at: new Date().toISOString() });
+    autorizanteActual = nuevo;
+    alert('Autorizante actualizado. Los pr\u00f3ximos Arqueos ya lo usar\u00e1n.');
+  } catch(err){
+    alert('Error al guardar el autorizante: ' + err.message);
+  }
+});
+
 async function cargarFirmasPermanentes(){
   try{
     const { data, error } = await supabaseClient.from('firmas_personas').select('*');
@@ -2019,7 +2082,7 @@ async function restaurarCajaDesdeSupabase(){
           origenDestino:r.origen_destino||'', total, afecto: Math.min(total,AFECTO_LIMITE), inafecto: Math.max(0,total-AFECTO_LIMITE),
           fotoManual:null, evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null };
       });
-      if(movBanco) movimientosBanco = movBanco.map(m=>({ fecha:m.fecha, tipo:m.tipo, descripcion:m.descripcion, monto:parseFloat(m.monto) }));
+      if(movBanco) movimientosBanco = movBanco.map(m=>({ id:m.id, fecha:m.fecha, tipo:m.tipo, descripcion:m.descripcion, monto:parseFloat(m.monto) }));
 
       renderTabla();
       renderBancoEnVivo();
@@ -2200,7 +2263,7 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
   const bSec = 'font-family:Arial; font-size:11px; font-weight:bold; padding:3px 6px; border:1px solid #000; background:#fff;';
 
   const filaComprobantes = registros.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bFc}">${r.documento||''}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
-  const filaVales = registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">CARLOS HIGA</td></tr>`).join('');
+  const filaVales = registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">${autorizanteActual}</td></tr>`).join('');
   const filaPendientes = cajasCerradas.map(c=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td><td style="${bFc}"></td></tr>`).join('');
 
   const denominaciones = [200,100,50,20,10];
