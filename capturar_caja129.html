@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '5';
+const APP_VERSION_CAPTURA = '6';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -318,24 +318,36 @@ function continuarConArchivo(file){
   preview.style.display = 'block';
 }
 
-document.getElementById('btnUsarCompleta').addEventListener('click', ()=>{
+document.getElementById('btnUsarCompleta').addEventListener('click', (e)=>{
+  e.target.disabled = true;
   overlayRecorte.style.display = 'none';
-  if(cropperInstance){ cropperInstance.destroy(); cropperInstance = null; }
+  if(cropperInstance){ try{ cropperInstance.destroy(); }catch(_){} cropperInstance = null; }
   continuarConArchivo(overlayRecorte._archivoOriginal);
+  e.target.disabled = false;
 });
 
-document.getElementById('btnRecortarContinuar').addEventListener('click', ()=>{
+document.getElementById('btnRecortarContinuar').addEventListener('click', (e)=>{
   if(!cropperInstance){
     // Respaldo: si por alguna razon no hay editor activo, no dejar el boton sin hacer nada
     overlayRecorte.style.display = 'none';
     continuarConArchivo(overlayRecorte._archivoOriginal);
     return;
   }
-  cropperInstance.getCroppedCanvas({ imageSmoothingQuality: 'high' }).toBlob((blob)=>{
+  const btn = e.target;
+  if(btn.disabled) return; // evita el doble toque mientras procesa
+  btn.disabled = true;
+  document.getElementById('btnUsarCompleta').disabled = true;
+  btn.textContent = 'Procesando...';
+  const instanciaAlMomento = cropperInstance; // referencia fija, evita el error si cropperInstance cambia mientras se procesa
+  instanciaAlMomento.getCroppedCanvas({ imageSmoothingQuality: 'high' }).toBlob((blob)=>{
     const tipoOriginal = overlayRecorte.dataset.archivoOriginalTipo || 'image/jpeg';
     const archivoRecortado = new File([blob], 'recorte.jpg', { type: tipoOriginal.includes('png') ? 'image/png' : 'image/jpeg' });
     overlayRecorte.style.display = 'none';
-    cropperInstance.destroy(); cropperInstance = null;
+    try{ instanciaAlMomento.destroy(); }catch(_){}
+    if(cropperInstance === instanciaAlMomento) cropperInstance = null;
+    btn.disabled = false;
+    document.getElementById('btnUsarCompleta').disabled = false;
+    btn.textContent = '\u2702\ufe0f Recortar y continuar';
     continuarConArchivo(archivoRecortado);
   }, overlayRecorte.dataset.archivoOriginalTipo && overlayRecorte.dataset.archivoOriginalTipo.includes('png') ? 'image/png' : 'image/jpeg', 0.92);
 });
