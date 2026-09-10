@@ -249,21 +249,32 @@ function manejarArchivoSeleccionado(file){
     preview.style.display = 'block';
     return;
   }
+  // Si la libreria de recorte no cargo (red lenta, CDN bloqueado), se usa la foto completa sin recorte
+  if(typeof Cropper === 'undefined'){
+    continuarConArchivo(file);
+    return;
+  }
   // Imagenes: se abre el editor de recorte primero
   imgParaRecortar.src = URL.createObjectURL(file);
   overlayRecorte.style.display = 'flex';
   if(cropperInstance) cropperInstance.destroy();
-  cropperInstance = new Cropper(imgParaRecortar, {
-    viewMode: 1,
-    autoCropArea: 1,
-    background: false,
-    movable: true,
-    zoomable: true,
-    scalable: false,
-  });
-  // Guardar el archivo original por si el usuario elige "Usar foto completa"
   overlayRecorte.dataset.archivoOriginalTipo = file.type;
   overlayRecorte._archivoOriginal = file;
+  try{
+    cropperInstance = new Cropper(imgParaRecortar, {
+      viewMode: 1,
+      autoCropArea: 1,
+      background: false,
+      movable: true,
+      zoomable: true,
+      scalable: false,
+    });
+  } catch(err){
+    // Si el editor falla al iniciar, no se deja al usuario atascado: se usa la foto completa
+    cropperInstance = null;
+    overlayRecorte.style.display = 'none';
+    continuarConArchivo(file);
+  }
 }
 
 function continuarConArchivo(file){
@@ -281,7 +292,12 @@ document.getElementById('btnUsarCompleta').addEventListener('click', ()=>{
 });
 
 document.getElementById('btnRecortarContinuar').addEventListener('click', ()=>{
-  if(!cropperInstance) return;
+  if(!cropperInstance){
+    // Respaldo: si por alguna razon no hay editor activo, no dejar el boton sin hacer nada
+    overlayRecorte.style.display = 'none';
+    continuarConArchivo(overlayRecorte._archivoOriginal);
+    return;
+  }
   cropperInstance.getCroppedCanvas({ imageSmoothingQuality: 'high' }).toBlob((blob)=>{
     const tipoOriginal = overlayRecorte.dataset.archivoOriginalTipo || 'image/jpeg';
     const archivoRecortado = new File([blob], 'recorte.jpg', { type: tipoOriginal.includes('png') ? 'image/png' : 'image/jpeg' });
