@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Control de Caja Chica — KC Santa Clara</title>
@@ -15,6 +18,19 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
+// ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
+const APP_VERSION_CAPTURA = '2';
+(function(){
+  const versionGuardada = localStorage.getItem('capturaAppVersion');
+  if(versionGuardada !== APP_VERSION_CAPTURA){
+    localStorage.setItem('capturaAppVersion', APP_VERSION_CAPTURA);
+    if(versionGuardada !== null){ // no recargar la primerisima vez que se abre (no hay nada que "actualizar")
+      const url = new URL(location.href);
+      url.searchParams.set('_v', APP_VERSION_CAPTURA + '_' + Date.now());
+      location.replace(url.toString());
+    }
+  }
+})();
 const SUPABASE_URL = 'https://zevbmpkomkugnzokukef.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpldmJtcGtvbWt1Z256b2t1a2VmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NzQ2MTQsImV4cCI6MjEwMDE1MDYxNH0.HoVYsKCfonfveChtF3beMMLB-HyHV2THEMmqmgD-ZEw';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
