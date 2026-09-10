@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '4';
+const APP_VERSION_CAPTURA = '5';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -75,6 +75,13 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
   .tipo-btn:nth-child(2){ background:var(--accent); }
   .tipo-btn:nth-child(3){ background:#1c2b3a; }
   .tipo-btn:nth-child(4){ background:#5a4a8a; }
+  .caja-btn{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:8px; padding:14px 10px; color:#fff; border:none;
+    border-radius:8px; font-family:monospace; font-size:11px; text-transform:uppercase;
+    letter-spacing:.03em; cursor:pointer; text-align:center;
+  }
+  .caja-btn .icono{ font-size:22px; }
   .tipo-actual{
     font-family:monospace; font-size:13px; font-weight:bold; color:var(--ink);
     text-transform:uppercase; margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid var(--ink);
@@ -111,11 +118,11 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
 
 <main>
   <div class="grid-tipos" style="grid-template-columns:1fr 1fr; margin-bottom:4px;">
-    <button class="tipo-btn" id="btnCajaMantenimiento" style="background:var(--ink); padding:14px 10px;">
-      <span class="icono" style="font-size:22px;">&#128295;</span><span>Mantenimiento</span>
+    <button class="caja-btn" id="btnCajaMantenimiento" style="background:var(--ink);">
+      <span class="icono">&#128295;</span><span>Mantenimiento</span>
     </button>
-    <button class="tipo-btn" id="btnCajaFoods" style="background:#9a9a9a; padding:14px 10px;">
-      <span class="icono" style="font-size:22px;">&#127869;</span><span>Foods</span>
+    <button class="caja-btn" id="btnCajaFoods" style="background:#9a9a9a;">
+      <span class="icono">&#127869;</span><span>Foods</span>
     </button>
   </div>
   <div class="nota" id="notaCajaActual" style="text-align:center; font-weight:bold;">Enviando a: MANTENIMIENTO</div>
@@ -379,9 +386,8 @@ function agregarItemLista(html, esError){
 }
 
 document.getElementById('btnGuardar').addEventListener('click', async ()=>{
-  agregarItemLista(`&#128269; Bot\u00f3n presionado. Archivo listo: ${archivoActual ? 'S\u00ed ('+(archivoActual.size/1024).toFixed(0)+' KB)' : 'NO'}. Tipo: ${tipoSeleccionado||'NO'}. Caja: ${cajaTipoSeleccionado}.`);
   if(!archivoActual || !tipoSeleccionado){
-    agregarItemLista('&#10060; No se puede enviar: falta el archivo o el tipo de documento. Vuelve a tomar la foto desde el men\u00fa.', true);
+    agregarItemLista('&#10060; No se pudo enviar (falta la foto o el tipo de documento). Vuelve a tomar la foto desde el men\u00fa.', true);
     return;
   }
   const btn = document.getElementById('btnGuardar');
