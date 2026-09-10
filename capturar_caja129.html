@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '2';
+const APP_VERSION_CAPTURA = '3';
 (function(){
   const versionGuardada = localStorage.getItem('capturaAppVersion');
   if(versionGuardada !== APP_VERSION_CAPTURA){
@@ -333,6 +333,33 @@ document.getElementById('btnDescartar').addEventListener('click', ()=>{
   inputArchivo.value = '';
 });
 
+// Reduce el tamano de la imagen antes de enviarla (fotos de celular actuales pesan varios MB,
+// lo que puede colgarse con senal debil). PDFs no se tocan.
+function redimensionarSiEsNecesario(file, maxDim, calidad){
+  maxDim = maxDim || 1600; calidad = calidad || 0.8;
+  return new Promise((resolve)=>{
+    if(!file || file.type === 'application/pdf'){ resolve(file); return; }
+    const img = new Image();
+    img.onload = ()=>{
+      const {width, height} = img;
+      if(width<=maxDim && height<=maxDim){ resolve(file); return; }
+      const escala = maxDim / Math.max(width, height);
+      const nuevoAncho = Math.round(width*escala);
+      const nuevoAlto = Math.round(height*escala);
+      const canvas = document.createElement('canvas');
+      canvas.width = nuevoAncho; canvas.height = nuevoAlto;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, nuevoAncho, nuevoAlto);
+      canvas.toBlob((blob)=>{
+        if(!blob){ resolve(file); return; }
+        resolve(new File([blob], 'foto.jpg', { type: 'image/jpeg' }));
+      }, 'image/jpeg', calidad);
+    };
+    img.onerror = ()=> resolve(file); // si algo falla, se manda el archivo original sin redimensionar
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 function agregarItemLista(html, esError){
   const item = document.createElement('div');
   item.className = 'item';
@@ -346,18 +373,27 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnGuardar');
   btn.disabled = true; btn.textContent = 'Enviando...';
 
+  // Si la senal esta lenta, avisar en vez de dejar el boton en silencio
+  const avisoLento = setTimeout(()=>{
+    btn.textContent = 'Sigue enviando (se\u00f1al lenta)...';
+  }, 6000);
+
   try{
+    // Reducir el peso de la foto antes de subir (fotos de celular actuales pesan varios MB)
+    const archivoParaEnviar = await redimensionarSiEsNecesario(archivoActual);
+
     const base64 = await new Promise((resolve,reject)=>{
       const reader = new FileReader();
       reader.onload = ()=>resolve(reader.result.split(',')[1]);
       reader.onerror = reject;
-      reader.readAsDataURL(archivoActual);
+      reader.readAsDataURL(archivoParaEnviar);
     });
 
     if(tipoSeleccionado === 'firma'){
       const nombre = document.getElementById('firmaNombre').value.trim().toUpperCase();
       if(!nombre){
         agregarItemLista('&#10060; Escribe el nombre de la persona antes de enviar.', true);
+        clearTimeout(avisoLento);
         btn.disabled = false; btn.textContent = 'Enviar a la laptop';
         return;
       }
@@ -374,8 +410,8 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
       agregarItemLista(`&#9989; Firma de <b>${nombre}</b> guardada de forma permanente.`);
     } else {
       const { error } = await supabaseClient.from('fotos_puente_caja129').insert({
-        nombre_archivo: `${tipoSeleccionado}_${Date.now()}${archivoActual.type==='application/pdf'?'.pdf':'.jpg'}`,
-        tipo_archivo: archivoActual.type || 'image/jpeg',
+        nombre_archivo: `${tipoSeleccionado}_${Date.now()}${archivoParaEnviar.type==='application/pdf'?'.pdf':'.jpg'}`,
+        tipo_archivo: archivoParaEnviar.type || 'image/jpeg',
         tipo: tipoSeleccionado,
         data_base64: base64,
         caja_tipo: cajaTipoSeleccionado
@@ -384,14 +420,15 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
       agregarItemLista(`&#9989; ${NOMBRES_TIPO[tipoSeleccionado]} enviado a la laptop.`);
     }
   } catch(err){
-    agregarItemLista('&#10060; Error al enviar: ' + err.message, true);
+    agregarItemLista('&#10060; Error al enviar: ' + (err && err.message ? err.message : 'intenta de nuevo, revisa tu se\u00f1al.'), true);
+  } finally {
+    clearTimeout(avisoLento);
+    btn.disabled = false; btn.textContent = 'Enviar a la laptop';
+    archivoActual = null;
+    preview.style.display = 'none';
+    inputCamara.value = ''; inputArchivo.value = '';
+    document.getElementById('firmaNombre').value = '';
   }
-
-  btn.disabled = false; btn.textContent = 'Enviar a la laptop';
-  archivoActual = null;
-  preview.style.display = 'none';
-  inputCamara.value = ''; inputArchivo.value = '';
-  document.getElementById('firmaNombre').value = '';
 });
 
 document.getElementById('logoSodexoCap').src = 'data:image/png;base64,' + LOGO_SODEXO_B64_CAP;
