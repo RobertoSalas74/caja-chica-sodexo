@@ -19,7 +19,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '3';
+const APP_VERSION_CAPTURA = '4';
+window.addEventListener('error', (e)=>{
+  try{
+    const item = document.createElement('div');
+    item.className = 'item';
+    item.style.color = 'var(--accent)';
+    item.textContent = '\u26a0\ufe0f Error en la app: ' + (e.message||'desconocido');
+    const listaEl = document.getElementById('lista');
+    if(listaEl) listaEl.prepend(item);
+  } catch(_){}
+});
 (function(){
   const versionGuardada = localStorage.getItem('capturaAppVersion');
   if(versionGuardada !== APP_VERSION_CAPTURA){
@@ -369,7 +379,11 @@ function agregarItemLista(html, esError){
 }
 
 document.getElementById('btnGuardar').addEventListener('click', async ()=>{
-  if(!archivoActual || !tipoSeleccionado) return;
+  agregarItemLista(`&#128269; Bot\u00f3n presionado. Archivo listo: ${archivoActual ? 'S\u00ed ('+(archivoActual.size/1024).toFixed(0)+' KB)' : 'NO'}. Tipo: ${tipoSeleccionado||'NO'}. Caja: ${cajaTipoSeleccionado}.`);
+  if(!archivoActual || !tipoSeleccionado){
+    agregarItemLista('&#10060; No se puede enviar: falta el archivo o el tipo de documento. Vuelve a tomar la foto desde el men\u00fa.', true);
+    return;
+  }
   const btn = document.getElementById('btnGuardar');
   btn.disabled = true; btn.textContent = 'Enviando...';
 
