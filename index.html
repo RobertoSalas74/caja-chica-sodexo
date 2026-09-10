@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.20</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.21</div>
     </div>
   </header>
 
@@ -994,7 +994,7 @@ function renderBancoEnVivo(){
       <td class="num" style="color:var(--ok);">${m.tipo==='ingreso' ? 'S/ '+m.monto.toFixed(2) : ''}</td>
       <td class="num" style="color:#c0392b;">${m.tipo==='egreso' ? 'S/ '+m.monto.toFixed(2) : ''}</td>
       <td class="num" style="font-weight:bold;">S/ ${saldoAcum.toFixed(2)}</td>
-      <td><button class="del-btn" onclick="eliminarMovimientoBanco(${i})">Eliminar</button></td>
+      <td>${m.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('banco',${i})">Ver</button> ` : ''}<button class="del-btn" onclick="eliminarMovimientoBanco(${i})">Eliminar</button></td>
     </tr>
   `;
   }).join('');
@@ -1041,15 +1041,17 @@ document.getElementById('btnAgregarMovimientoBanco').addEventListener('click', a
   const descripcion = document.getElementById('bancoMovDescripcion').value.trim();
   const monto = parseFloat(document.getElementById('bancoMovMonto').value)||0;
   if(!fecha || !descripcion || !monto) return;
-  const mov = {fecha, tipo, descripcion, monto, id: null};
+  const mov = {fecha, tipo, descripcion, monto, id: null, evidencia: evidenciaBancoActual};
   movimientosBanco.push(mov);
   if(cajaIdActual){
     try{
+      const evidenciaUrl = await subirEvidenciaAStorage(evidenciaBancoActual, 'banco');
       const { data, error } = await supabaseClient.from('movimientos_banco')
-        .insert({ caja_id: cajaIdActual, fecha, tipo, descripcion, monto }).select('id').single();
+        .insert({ caja_id: cajaIdActual, fecha, tipo, descripcion, monto, evidencia_url: evidenciaUrl }).select('id').single();
       if(!error && data) mov.id = data.id;
     } catch(e){ console.warn('No se pudo sincronizar el movimiento de banco con Supabase:', e.message); }
   }
+  evidenciaBancoActual = null;
   document.getElementById('bancoMovDescripcion').value='';
   document.getElementById('bancoMovMonto').value='';
   renderBancoEnVivo();
@@ -1272,7 +1274,7 @@ function eliminarRegistro(modo, i){
 }
 
 function verEvidencia(modo, i){
-  const r = modo==='factura' ? registros[i] : registrosMov[i];
+  const r = modo==='factura' ? registros[i] : modo==='banco' ? movimientosBanco[i] : registrosMov[i];
   if(!r || !r.evidencia) return;
   const esPdf = (r.evidencia.tipo||'').includes('pdf');
   const html = esPdf
@@ -1825,6 +1827,7 @@ async function subirEvidenciaAStorage(evidencia, carpeta){
 
 let evidenciaFacturaActual = null; // dataURL de la foto/PDF cargado, para "Ver documento" despues
 let evidenciaMovilidadActual = null;
+let evidenciaBancoActual = null;
 
 document.getElementById('bArchivoLector').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
@@ -1837,6 +1840,9 @@ document.getElementById('bArchivoLector').addEventListener('change', async (e)=>
     if(datos.precio) document.getElementById('bancoMovMonto').value = datos.precio;
     document.getElementById('bancoMovDescripcion').value = datos.descripcion || ('Voucher de Banco' + (datos.documento ? ' - ' + datos.documento : ''));
     document.getElementById('bancoMovTipo').value = 'egreso';
+    const reader = new FileReader();
+    reader.onload = ()=>{ evidenciaBancoActual = { dataUrl: reader.result, tipo: file.type }; };
+    reader.readAsDataURL(file);
     const camposLlenos = ['fecha','precio','descripcion','documento'].filter(k=>datos[k]).length;
     estado.textContent = `Voucher le\u00eddo. Se pre-llenaron ${camposLlenos} campo(s). Revisa el Tipo (Ingreso/Egreso) y presiona "Agregar movimiento".`;
   } catch(err){
@@ -2000,19 +2006,28 @@ async function recibirDocumentoCelular(estadoElId){
       if(datos.precio) document.getElementById('bancoMovMonto').value = datos.precio;
       document.getElementById('bancoMovDescripcion').value = datos.descripcion || ('Voucher de Banco' + (datos.documento ? ' - ' + datos.documento : ''));
       document.getElementById('bancoMovTipo').value = 'egreso';
-      evidenciaFacturaActual = { dataUrl: 'data:' + doc.tipo_archivo + ';base64,' + doc.data_base64, tipo: doc.tipo_archivo };
+      evidenciaBancoActual = { dataUrl: 'data:' + doc.tipo_archivo + ';base64,' + doc.data_base64, tipo: doc.tipo_archivo };
       const camposLlenos = ['fecha','precio','descripcion','documento'].filter(k=>datos[k]).length;
       mensajeResultado = `Voucher de Banco recibido. Se pre-llenaron ${camposLlenos} campo(s). Revisa/edita la descripci\u00f3n, confirma el Tipo (Ingreso/Egreso) y presiona "Agregar movimiento" para guardarlo.`;
     } else {
       mensajeResultado = `Documento de tipo "${doc.tipo}" recibido, pero no tiene una acci\u00f3n definida.`;
     }
 
-    // Borrar del puente apenas se recibe (no queda guardado en la nube)
-    await supabaseClient.from('fotos_puente_caja129').delete().eq('id', doc.id);
+    // Borrar del puente apenas se recibe (no queda guardado en la nube).
+    // Se verifica el resultado: si falla, se avisa en pantalla en vez de fallar en silencio
+    // (un borrado fallido sin avisar es lo que causaba que la misma foto volviera a aparecer despues).
+    let avisoBorradoFallido = '';
+    try{
+      const { error: errorBorrado } = await supabaseClient.from('fotos_puente_caja129').delete().eq('id', doc.id);
+      if(errorBorrado) throw errorBorrado;
+    } catch(errBorrado){
+      avisoBorradoFallido = `<br><span style="color:var(--accent); font-weight:bold;">\u26a0\ufe0f No se pudo borrar esta foto del celular (${errBorrado.message}). Puede que vuelva a aparecer la pr\u00f3xima vez — si eso pasa, ign\u00f3rala, ya qued\u00f3 registrada.</span>`;
+    }
 
     estado.innerHTML = mensajeResultado +
       (data.length>1 ? ` Quedan ${data.length-1} documento(s) m\u00e1s — presiona de nuevo para traer el siguiente.` : '') +
       (errorIAMostrar2 ? `<br><span style="color:var(--accent);">\u26a0\ufe0f La IA fall\u00f3, se us\u00f3 el respaldo. Motivo: ${errorIAMostrar2}</span>` : '') +
+      avisoBorradoFallido +
       (datos._textoLeido ? `<br><span style="opacity:.7;">Texto le\u00eddo: "${datos._textoLeido.slice(0,250)}..."</span>` : '');
   } catch(err){
     estado.textContent = 'Error al recibir del celular: ' + err.message;
@@ -2196,7 +2211,7 @@ async function restaurarCajaDesdeSupabase(){
           origenDestino:r.origen_destino||'', total, afecto: Math.min(total,AFECTO_LIMITE), inafecto: Math.max(0,total-AFECTO_LIMITE),
           fotoManual:null, evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null };
       });
-      if(movBanco) movimientosBanco = movBanco.map(m=>({ id:m.id, fecha:m.fecha, tipo:m.tipo, descripcion:m.descripcion, monto:parseFloat(m.monto) }));
+      if(movBanco) movimientosBanco = movBanco.map(m=>({ id:m.id, fecha:m.fecha, tipo:m.tipo, descripcion:m.descripcion, monto:parseFloat(m.monto), evidencia: m.evidencia_url ? {dataUrl:m.evidencia_url, tipo:''} : null }));
 
       renderTabla();
       renderBancoEnVivo();
