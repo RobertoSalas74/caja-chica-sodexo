@@ -12,6 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Caja 129">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://zevbmpkomkugnzokukef.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpldmJtcGtvbWt1Z256b2t1a2VmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NzQ2MTQsImV4cCI6MjEwMDE1MDYxNH0.HoVYsKCfonfveChtF3beMMLB-HyHV2THEMmqmgD-ZEw';
@@ -82,6 +84,16 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
 </header>
 
 <main>
+  <div class="grid-tipos" style="grid-template-columns:1fr 1fr; margin-bottom:4px;">
+    <button class="tipo-btn" id="btnCajaMantenimiento" style="background:var(--ink); padding:14px 10px;">
+      <span class="icono" style="font-size:22px;">&#128295;</span><span>Mantenimiento</span>
+    </button>
+    <button class="tipo-btn" id="btnCajaFoods" style="background:#9a9a9a; padding:14px 10px;">
+      <span class="icono" style="font-size:22px;">&#127869;</span><span>Foods</span>
+    </button>
+  </div>
+  <div class="nota" id="notaCajaActual" style="text-align:center; font-weight:bold;">Enviando a: MANTENIMIENTO</div>
+
   <div id="menuTipos" class="grid-tipos">
     <button class="tipo-btn" data-tipo="factura">
       <span class="icono">&#128196;</span><span>Factura / Boucher</span>
@@ -135,6 +147,16 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
   </div>
 </main>
 
+<div id="overlayRecorte" style="display:none; position:fixed; inset:0; background:#000; z-index:9999; flex-direction:column;">
+  <div style="flex:1; position:relative; overflow:hidden;">
+    <img id="imgParaRecortar" src="" alt="Recortar" style="display:block; max-width:100%;">
+  </div>
+  <div style="padding:14px; background:#111; display:flex; gap:10px;">
+    <button class="accion" id="btnUsarCompleta" style="background:#fff;">Usar foto completa</button>
+    <button class="accion principal" id="btnRecortarContinuar" style="background:var(--ok); color:#fff; border-color:var(--ok);">&#9986;&#65039; Recortar y continuar</button>
+  </div>
+</div>
+
 
 <script>
 const menuTipos = document.getElementById('menuTipos');
@@ -152,6 +174,36 @@ const lista = document.getElementById('lista');
 
 let tipoSeleccionado = null;
 let archivoActual = null;
+
+// ── Caja destino (Mantenimiento/Foods) — se recuerda en este celular entre usos ──
+let cajaTipoSeleccionado = localStorage.getItem('cajaTipoCapturaCaja129') || 'mantenimiento';
+
+function actualizarBotonesCaja(){
+  const btnM = document.getElementById('btnCajaMantenimiento');
+  const btnF = document.getElementById('btnCajaFoods');
+  const nota = document.getElementById('notaCajaActual');
+  if(cajaTipoSeleccionado === 'foods'){
+    btnF.style.background = 'var(--ink)';
+    btnM.style.background = '#9a9a9a';
+    nota.textContent = 'Enviando a: FOODS';
+  } else {
+    btnM.style.background = 'var(--ink)';
+    btnF.style.background = '#9a9a9a';
+    nota.textContent = 'Enviando a: MANTENIMIENTO';
+  }
+}
+actualizarBotonesCaja();
+
+document.getElementById('btnCajaMantenimiento').addEventListener('click', ()=>{
+  cajaTipoSeleccionado = 'mantenimiento';
+  localStorage.setItem('cajaTipoCapturaCaja129', cajaTipoSeleccionado);
+  actualizarBotonesCaja();
+});
+document.getElementById('btnCajaFoods').addEventListener('click', ()=>{
+  cajaTipoSeleccionado = 'foods';
+  localStorage.setItem('cajaTipoCapturaCaja129', cajaTipoSeleccionado);
+  actualizarBotonesCaja();
+});
 
 const NOMBRES_TIPO = {
   factura: '&#128196; Factura / Boucher',
@@ -183,19 +235,61 @@ document.getElementById('btnVolverMenu').addEventListener('click', ()=>{
 btnAbrirCamara.addEventListener('click', ()=> inputCamara.click());
 btnAbrirArchivos.addEventListener('click', ()=> inputArchivo.click());
 
+let cropperInstance = null;
+const overlayRecorte = document.getElementById('overlayRecorte');
+const imgParaRecortar = document.getElementById('imgParaRecortar');
+
 function manejarArchivoSeleccionado(file){
   if(!file) return;
-  archivoActual = file;
   if(file.type === 'application/pdf'){
+    // Los PDF no pasan por el editor de recorte
+    archivoActual = file;
     imgPreview.style.display = 'none';
     pdfPreview.style.display = 'block';
-  } else {
-    imgPreview.style.display = 'block';
-    pdfPreview.style.display = 'none';
-    imgPreview.src = URL.createObjectURL(file);
+    preview.style.display = 'block';
+    return;
   }
+  // Imagenes: se abre el editor de recorte primero
+  imgParaRecortar.src = URL.createObjectURL(file);
+  overlayRecorte.style.display = 'flex';
+  if(cropperInstance) cropperInstance.destroy();
+  cropperInstance = new Cropper(imgParaRecortar, {
+    viewMode: 1,
+    autoCropArea: 1,
+    background: false,
+    movable: true,
+    zoomable: true,
+    scalable: false,
+  });
+  // Guardar el archivo original por si el usuario elige "Usar foto completa"
+  overlayRecorte.dataset.archivoOriginalTipo = file.type;
+  overlayRecorte._archivoOriginal = file;
+}
+
+function continuarConArchivo(file){
+  archivoActual = file;
+  imgPreview.style.display = 'block';
+  pdfPreview.style.display = 'none';
+  imgPreview.src = URL.createObjectURL(file);
   preview.style.display = 'block';
 }
+
+document.getElementById('btnUsarCompleta').addEventListener('click', ()=>{
+  overlayRecorte.style.display = 'none';
+  if(cropperInstance){ cropperInstance.destroy(); cropperInstance = null; }
+  continuarConArchivo(overlayRecorte._archivoOriginal);
+});
+
+document.getElementById('btnRecortarContinuar').addEventListener('click', ()=>{
+  if(!cropperInstance) return;
+  cropperInstance.getCroppedCanvas({ imageSmoothingQuality: 'high' }).toBlob((blob)=>{
+    const tipoOriginal = overlayRecorte.dataset.archivoOriginalTipo || 'image/jpeg';
+    const archivoRecortado = new File([blob], 'recorte.jpg', { type: tipoOriginal.includes('png') ? 'image/png' : 'image/jpeg' });
+    overlayRecorte.style.display = 'none';
+    cropperInstance.destroy(); cropperInstance = null;
+    continuarConArchivo(archivoRecortado);
+  }, overlayRecorte.dataset.archivoOriginalTipo && overlayRecorte.dataset.archivoOriginalTipo.includes('png') ? 'image/png' : 'image/jpeg', 0.92);
+});
 
 inputCamara.addEventListener('change', (e)=> manejarArchivoSeleccionado(e.target.files[0]));
 inputArchivo.addEventListener('change', (e)=> manejarArchivoSeleccionado(e.target.files[0]));
@@ -242,7 +336,7 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
         img.src = 'data:image/png;base64,' + base64;
       });
       const { error } = await supabaseClient.from('firmas_personas').upsert({
-        nombre, firma_base64: base64, fw: dims.w, fh: dims.h
+        nombre, firma_base64: base64, fw: dims.w, fh: dims.h, tipo_caja: cajaTipoSeleccionado
       });
       if(error) throw error;
       agregarItemLista(`&#9989; Firma de <b>${nombre}</b> guardada de forma permanente.`);
@@ -251,7 +345,8 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
         nombre_archivo: `${tipoSeleccionado}_${Date.now()}${archivoActual.type==='application/pdf'?'.pdf':'.jpg'}`,
         tipo_archivo: archivoActual.type || 'image/jpeg',
         tipo: tipoSeleccionado,
-        data_base64: base64
+        data_base64: base64,
+        caja_tipo: cajaTipoSeleccionado
       });
       if(error) throw error;
       agregarItemLista(`&#9989; ${NOMBRES_TIPO[tipoSeleccionado]} enviado a la laptop.`);
