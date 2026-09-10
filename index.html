@@ -150,6 +150,12 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     font-family:var(--mono); font-size:12px; color:var(--ok); background:var(--ok-soft);
     padding:4px 10px; border-radius:12px;
   }
+@media print {
+  body * { visibility: hidden; }
+  #modalContenido, #modalContenido * { visibility: visible; }
+  #modalContenido { position: absolute; top: 0; left: 0; width: 100%; }
+  #modalVistaPrevia { position: static !important; background: none !important; }
+}
 </style>
 </head>
 <body>
@@ -186,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.19</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.20</div>
     </div>
   </header>
 
@@ -345,6 +351,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     <div class="actions">
       <button id="btnAgregarMovimientoBanco">Agregar movimiento</button>
       <button class="secondary" id="btnDescargarHistorialBanco">Descargar historial (CSV)</button>
+      <button class="secondary" id="btnImprimirHistorialBanco">&#128424; Imprimir historial</button>
     </div>
 
     <div id="listaMovimientosBanco" style="margin-top:16px;"></div>
@@ -2229,6 +2236,54 @@ function abrirModal(titulo, html){
 }
 document.getElementById('btnCerrarModal').addEventListener('click', ()=> modalVistaPrevia.style.display='none');
 modalVistaPrevia.addEventListener('click', (e)=>{ if(e.target===modalVistaPrevia) modalVistaPrevia.style.display='none'; });
+
+// ── Imprimir el historial de Banco en Vivo (solo movimientos, para verificacion fisica) ──
+document.getElementById('btnImprimirHistorialBanco').addEventListener('click', ()=>{
+  const etiquetaTipo = cajaTipoActiva === 'foods' ? 'FOODS' : 'MANTENIMIENTO';
+  const bF = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:4px 8px;';
+  const bFr = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:4px 8px; text-align:right;';
+  const bH = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:4px 8px; font-weight:bold; background:#f2f2f2;';
+
+  let saldoAcum = saldoInicialBanco;
+  const filas = movimientosBanco.map(m=>{
+    saldoAcum += m.tipo==='ingreso' ? m.monto : -m.monto;
+    return `<tr>
+      <td style="${bF}">${m.fecha}</td>
+      <td style="${bF}">${m.descripcion}</td>
+      <td style="${bFr}color:green;">${m.tipo==='ingreso' ? 'S/ '+m.monto.toFixed(2) : ''}</td>
+      <td style="${bFr}color:#c0392b;">${m.tipo==='egreso' ? 'S/ '+m.monto.toFixed(2) : ''}</td>
+      <td style="${bFr}font-weight:bold;">S/ ${saldoAcum.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `
+    <div style="padding:16px 20px;">
+      <table style="border-collapse:collapse; width:100%; margin-bottom:6px;">
+        <tr>
+          <td style="border:1px solid #000; padding:4px 10px; width:35%;"><img src="data:image/png;base64,${LOGO_SODEXO_B64}" style="height:26px;"></td>
+          <td style="border:1px solid #000; padding:4px 10px; text-align:center; font-weight:bold; font-size:13px; font-family:Arial;">HISTORIAL BANCO EN VIVO &mdash; ${etiquetaTipo}</td>
+        </tr>
+      </table>
+      <table style="border-collapse:collapse; width:100%; margin-bottom:14px;">
+        <tr><td style="${bF}font-weight:bold; width:15%;">Contrato</td><td style="${bF}" colspan="3">KIMBERLY CLARK SANTA CLARA</td></tr>
+        <tr><td style="${bF}font-weight:bold;">N&deg; Caja</td><td style="${bF}">${cajaActiva||''}</td><td style="${bF}font-weight:bold;">Fecha impresi&oacute;n</td><td style="${bF}">${new Date().toLocaleDateString('es-PE')}</td></tr>
+      </table>
+
+      <table style="border-collapse:collapse; width:100%;">
+        <tr><td style="${bH}">Fecha</td><td style="${bH}">Descripci&oacute;n</td><td style="${bH}text-align:right;">Ingreso</td><td style="${bH}text-align:right;">Egreso</td><td style="${bH}text-align:right;">Saldo</td></tr>
+        ${filas || `<tr><td colspan="5" style="${bF}text-align:center;">Sin movimientos registrados</td></tr>`}
+      </table>
+
+      <table style="border-collapse:collapse; width:100%; margin-top:20px;">
+        <tr>
+          <td style="border:1px solid #000; width:50%; text-align:center; padding:30px 10px 4px; font-family:Arial; font-size:11px;">Verificado por</td>
+          <td style="border:1px solid #000; width:50%; text-align:center; padding:30px 10px 4px; font-family:Arial; font-size:11px;">Firma</td>
+        </tr>
+      </table>
+    </div>`;
+  abrirModal('Historial Banco en Vivo', html);
+  setTimeout(()=> window.print(), 200);
+});
 
 const estiloTH = 'background:#7030A0; color:#fff; font-family:Arial; font-size:11px; padding:8px 6px; text-align:center; border:1px solid #999;';
 const estiloTD = 'font-family:Arial; font-size:11px; padding:6px; border:1px solid #ddd; white-space:nowrap;';
