@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.23</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.24</div>
     </div>
   </header>
 
@@ -1119,18 +1119,20 @@ document.getElementById('btnAgregarFactura').addEventListener('click', async ()=
     return;
   }
   const total = cantidad*precio;
-  registros.push({
+  const registro = {
     caja, site:'SANTA CLARA', fecha, solicitante, documento, descripcion, detalle,
     unidad:'SOLES', cantidad, precio, sinIgv: total/1.18, total, tipo, cuenta, serviceCat,
-    evidencia: evidenciaFacturaActual
-  });
+    evidencia: evidenciaFacturaActual, id: null
+  };
+  registros.push(registro);
   if(cajaIdActual){
     try{
       const evidenciaUrl = await subirEvidenciaAStorage(evidenciaFacturaActual, 'comprobantes');
-      await supabaseClient.from('comprobantes').insert({
+      const { data, error } = await supabaseClient.from('comprobantes').insert({
         caja_id: cajaIdActual, fecha, descripcion, documento, importe: total, evidencia_url: evidenciaUrl,
         solicitante, tipo, cuenta, service_cat: serviceCat, detalle, cantidad, precio
-      });
+      }).select('id').single();
+      if(!error && data) registro.id = data.id;
     } catch(e){ console.warn('No se pudo sincronizar el comprobante con Supabase:', e.message); }
   }
   evidenciaFacturaActual = null;
@@ -1190,13 +1192,15 @@ document.getElementById('btnAgregarMovilidad').addEventListener('click', async (
   // Si subiste una foto de vale, se guarda junto al registro (tiene prioridad sobre la firma guardada)
   const fotoManual = fotoValeBase64 ? { firma: fotoValeBase64, fw: fotoValeDims.w, fh: fotoValeDims.h } : null;
 
-  registrosMov.push({ fecha, dni, solicitante, tipo, descripcion, origenDestino, total, afecto, inafecto, fotoManual, evidencia: evidenciaMovilidadActual });
+  registrosMov.push({ fecha, dni, solicitante, tipo, descripcion, origenDestino, total, afecto, inafecto, fotoManual, evidencia: evidenciaMovilidadActual, id: null });
+  const registroVale = registrosMov[registrosMov.length-1];
   if(cajaIdActual){
     try{
       const evidenciaUrl = await subirEvidenciaAStorage(evidenciaMovilidadActual, 'vales');
-      await supabaseClient.from('vales_movilidad').insert({
+      const { data, error } = await supabaseClient.from('vales_movilidad').insert({
         caja_id: cajaIdActual, fecha, solicitante, dni, motivo: descripcion, origen_destino: origenDestino, importe: total, autorizante: autorizanteActual, evidencia_url: evidenciaUrl, tipo
-      });
+      }).select('id').single();
+      if(!error && data) registroVale.id = data.id;
     } catch(e){ console.warn('No se pudo sincronizar el vale con Supabase:', e.message); }
   }
   evidenciaMovilidadActual = null;
@@ -1241,7 +1245,7 @@ function renderTabla(){
       <td>${r.descripcion}</td>
       <td class="small">${r.cuenta}</td>
       <td class="num">${fmt(r.total)}</td>
-      <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
+      <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('factura',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
     </tr>
   `).join('');
 
@@ -1253,7 +1257,7 @@ function renderTabla(){
       <td>${r.descripcion}</td>
       <td class="small">${r.origenDestino}</td>
       <td class="num">${fmt(r.total)}</td>
-      <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" onclick="eliminarRegistro('movilidad',${i})">Eliminar</button></td>
+      <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('movilidad',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('movilidad',${i})">Eliminar</button></td>
     </tr>
   `).join('');
 
@@ -1266,6 +1270,104 @@ function renderTabla(){
       <tbody>${rowsFactura}${rowsMov}</tbody>
     </table>
   `;
+}
+
+function editarRegistro(modo, i){
+  const r = modo==='factura' ? registros[i] : registrosMov[i];
+  if(!r) return;
+  const bC = 'margin-bottom:10px;';
+  let html;
+  if(modo==='factura'){
+    const { nombres } = listasActivas();
+    html = `
+      <div style="padding:16px 20px;">
+        <div style="${bC}"><label>Fecha</label><br><input type="date" id="editFecha" value="${r.fecha}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Solicitante</label><br><select id="editSolicitante" style="width:100%; padding:8px;">
+          <option value="">&mdash; Selecciona &mdash;</option>
+          ${nombres.map(n=>`<option ${n===r.solicitante?'selected':''}>${n}</option>`).join('')}
+        </select></div>
+        <div style="${bC}"><label>N&deg; Documento</label><br><input type="text" id="editDocumento" value="${r.documento||''}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Descripci&oacute;n</label><br><input type="text" id="editDescripcion" value="${r.descripcion||''}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Precio (S/)</label><br><input type="number" id="editPrecio" value="${r.precio}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Tipo de gasto</label><br><select id="editTipo" style="width:100%; padding:8px;">
+          <option value="">&mdash; Selecciona &mdash;</option>
+          <option ${r.tipo==='Gasto Sodexo'?'selected':''}>Gasto Sodexo</option>
+          <option ${r.tipo==='Gasto No controlable'?'selected':''}>Gasto No controlable</option>
+          <option ${r.tipo==='Refacturable'?'selected':''}>Refacturable</option>
+        </select></div>
+        <div style="${bC}"><label>Cuenta contable</label><br><select id="editCuenta" style="width:100%; padding:8px;">
+          <option value="">&mdash; Selecciona &mdash;</option>
+          ${CUENTAS.map(c=>`<option ${c===r.cuenta?'selected':''}>${c}</option>`).join('')}
+        </select></div>
+        <button id="btnGuardarEdicion" style="width:100%; padding:10px; margin-top:6px;">Guardar cambios</button>
+        <div id="editEstado" style="font-size:12px; margin-top:8px; text-align:center;"></div>
+      </div>`;
+  } else {
+    const { nombres } = listasActivas();
+    html = `
+      <div style="padding:16px 20px;">
+        <div style="${bC}"><label>Fecha</label><br><input type="date" id="editFecha" value="${r.fecha}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>DNI</label><br><input type="text" id="editDni" value="${r.dni||''}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Solicitante</label><br><select id="editSolicitante" style="width:100%; padding:8px;">
+          <option value="">&mdash; Selecciona &mdash;</option>
+          ${nombres.map(n=>`<option ${n===r.solicitante?'selected':''}>${n}</option>`).join('')}
+        </select></div>
+        <div style="${bC}"><label>Concepto</label><br><input type="text" id="editDescripcion" value="${r.descripcion||''}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Origen - Destino</label><br><input type="text" id="editOrigenDestino" value="${r.origenDestino||''}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Monto (S/)</label><br><input type="number" id="editMonto" value="${r.total}" style="width:100%; padding:8px;"></div>
+        <button id="btnGuardarEdicion" style="width:100%; padding:10px; margin-top:6px;">Guardar cambios</button>
+        <div id="editEstado" style="font-size:12px; margin-top:8px; text-align:center;"></div>
+      </div>`;
+  }
+  abrirModal('Editar ' + (modo==='factura' ? 'comprobante' : 'vale de movilidad'), html);
+
+  document.getElementById('btnGuardarEdicion').addEventListener('click', async ()=>{
+    const estado = document.getElementById('editEstado');
+    estado.textContent = 'Guardando...';
+    try{
+      if(modo==='factura'){
+        r.fecha = document.getElementById('editFecha').value;
+        r.solicitante = document.getElementById('editSolicitante').value;
+        r.documento = document.getElementById('editDocumento').value;
+        r.descripcion = document.getElementById('editDescripcion').value;
+        r.precio = parseFloat(document.getElementById('editPrecio').value)||0;
+        r.tipo = document.getElementById('editTipo').value;
+        r.cuenta = document.getElementById('editCuenta').value;
+        r.total = r.cantidad * r.precio;
+        r.sinIgv = r.total/1.18;
+        if(r.id){
+          const { error } = await supabaseClient.from('comprobantes').update({
+            fecha: r.fecha, solicitante: r.solicitante, documento: r.documento, descripcion: r.descripcion,
+            precio: r.precio, importe: r.total, tipo: r.tipo, cuenta: r.cuenta
+          }).eq('id', r.id);
+          if(error) throw error;
+        }
+      } else {
+        r.fecha = document.getElementById('editFecha').value;
+        r.dni = document.getElementById('editDni').value;
+        r.solicitante = document.getElementById('editSolicitante').value;
+        r.descripcion = document.getElementById('editDescripcion').value;
+        r.origenDestino = document.getElementById('editOrigenDestino').value;
+        r.total = parseFloat(document.getElementById('editMonto').value)||0;
+        r.afecto = Math.min(r.total, AFECTO_LIMITE);
+        r.inafecto = Math.max(0, r.total - AFECTO_LIMITE);
+        if(r.id){
+          const { error } = await supabaseClient.from('vales_movilidad').update({
+            fecha: r.fecha, dni: r.dni, solicitante: r.solicitante, motivo: r.descripcion,
+            origen_destino: r.origenDestino, importe: r.total
+          }).eq('id', r.id);
+          if(error) throw error;
+        }
+      }
+      estado.style.color = 'var(--ok)';
+      estado.textContent = 'Guardado correctamente.';
+      renderTabla();
+      setTimeout(()=>{ modalVistaPrevia.style.display='none'; }, 700);
+    } catch(err){
+      estado.style.color = 'var(--accent)';
+      estado.textContent = 'Error al guardar: ' + err.message;
+    }
+  });
 }
 
 function eliminarRegistro(modo, i){
@@ -2202,14 +2304,14 @@ async function restaurarCajaDesdeSupabase(){
       ]);
 
       if(comp) registros = comp.map(r=>({
-        caja: c.numero, site:'SANTA CLARA', fecha:r.fecha, solicitante:r.solicitante||'', documento:r.documento||'',
+        id: r.id, caja: c.numero, site:'SANTA CLARA', fecha:r.fecha, solicitante:r.solicitante||'', documento:r.documento||'',
         descripcion:r.descripcion, detalle:r.detalle||'', unidad:'SOLES', cantidad:parseFloat(r.cantidad)||1, precio:parseFloat(r.precio)||parseFloat(r.importe),
         sinIgv: parseFloat(r.importe)/1.18, total:parseFloat(r.importe), tipo:r.tipo||'', cuenta:r.cuenta||'', serviceCat:r.service_cat||'',
         evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null
       }));
       if(vales) registrosMov = vales.map(r=>{
         const total = parseFloat(r.importe);
-        return { fecha:r.fecha, dni:r.dni||'', solicitante:r.solicitante, tipo:r.tipo||'', descripcion:r.motivo||'',
+        return { id: r.id, fecha:r.fecha, dni:r.dni||'', solicitante:r.solicitante, tipo:r.tipo||'', descripcion:r.motivo||'',
           origenDestino:r.origen_destino||'', total, afecto: Math.min(total,AFECTO_LIMITE), inafecto: Math.max(0,total-AFECTO_LIMITE),
           fotoManual:null, evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null };
       });
