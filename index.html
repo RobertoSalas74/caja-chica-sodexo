@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.26</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.27</div>
     </div>
   </header>
 
@@ -1288,6 +1288,7 @@ function editarRegistro(modo, i){
         </select></div>
         <div style="${bC}"><label>N&deg; Documento</label><br><input type="text" id="editDocumento" value="${r.documento||''}" style="width:100%; padding:8px;"></div>
         <div style="${bC}"><label>Descripci&oacute;n</label><br><input type="text" id="editDescripcion" value="${r.descripcion||''}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Detalle</label><br><input type="text" id="editDetalle" value="${r.detalle||''}" style="width:100%; padding:8px;"></div>
         <div style="${bC}"><label>Precio (S/)</label><br><input type="number" id="editPrecio" value="${r.precio}" style="width:100%; padding:8px;"></div>
         <div style="${bC}"><label>Tipo de gasto</label><br><select id="editTipo" style="width:100%; padding:8px;">
           <option value="">&mdash; Selecciona &mdash;</option>
@@ -1334,6 +1335,7 @@ function editarRegistro(modo, i){
         r.solicitante = document.getElementById('editSolicitante').value;
         r.documento = document.getElementById('editDocumento').value;
         r.descripcion = document.getElementById('editDescripcion').value;
+        r.detalle = document.getElementById('editDetalle').value;
         r.precio = parseFloat(document.getElementById('editPrecio').value)||0;
         r.tipo = document.getElementById('editTipo').value;
         r.cuenta = document.getElementById('editCuenta').value;
@@ -1342,7 +1344,7 @@ function editarRegistro(modo, i){
         r.sinIgv = r.total/1.18;
         if(r.id){
           const { error } = await supabaseClient.from('comprobantes').update({
-            fecha: r.fecha, solicitante: r.solicitante, documento: r.documento, descripcion: r.descripcion,
+            fecha: r.fecha, solicitante: r.solicitante, documento: r.documento, descripcion: r.descripcion, detalle: r.detalle,
             precio: r.precio, importe: r.total, tipo: r.tipo, cuenta: r.cuenta, service_cat: r.serviceCat
           }).eq('id', r.id);
           if(error) throw error;
@@ -2424,19 +2426,22 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
     ['PLANNILLA REF AFECTO', sumaRefAfecto, 'Refacturable'],
     ['PLANNILLA REF INAFECTO', sumaRefInafecto, 'Refacturable']
   ];
-  const headers = ['#Caja','Site','Fecha','Solicitante','N&deg; Doc','Descripci&oacute;n','Unidad','Cant','Precio','Sin IGV','Total','Tipo Gasto','Cuenta Contable','Service Category'];
+  const marcaTemporal = new Date().toLocaleString('es-PE');
+  const headers = ['Marca temporal','#CAJA','SITE','FECHA DE DOCUMETO','SOLICITANTE','N&deg; DOCUMENTO',
+    'DESCRIPCION DE SERVICIO','DETALLE DE SERVICIO','UNIDAD','CANTIDAD','PRECIO','SIN IGV','TOTAL',
+    'TIPO DE GASTO','CUENTA CONTABLE','Service Category'];
   let filas = filasResumen.map(([desc,monto,tipo])=>`
     <tr>
-      <td style="${estiloTD}">${numCajaResumen}</td><td style="${estiloTD}">SANTA CLARA</td><td style="${estiloTD}"></td>
-      <td style="${estiloTD}"></td><td style="${estiloTD}"></td><td style="${estiloTD}">${desc}</td>
+      <td style="${estiloTD}">${marcaTemporal}</td><td style="${estiloTD}">${numCajaResumen}</td><td style="${estiloTD}">SANTA CLARA</td><td style="${estiloTD}"></td>
+      <td style="${estiloTD}"></td><td style="${estiloTD}"></td><td style="${estiloTD}">${desc}</td><td style="${estiloTD}"></td>
       <td style="${estiloTD}">SOLES</td><td style="${estiloTD}">1</td><td style="${estiloTD}">${monto.toFixed(2)}</td>
       <td style="${estiloTD}">${(monto/1.18).toFixed(2)}</td><td style="${estiloTD}">${monto.toFixed(2)}</td><td style="${estiloTD}">${tipo}</td>
       <td style="${estiloTD}"></td><td style="${estiloTD}"></td>
     </tr>`).join('');
   filas += registros.map(r=>`
     <tr>
-      <td style="${estiloTD}">${r.caja}</td><td style="${estiloTD}">${r.site}</td><td style="${estiloTD}">${r.fecha}</td>
-      <td style="${estiloTD}">${r.solicitante}</td><td style="${estiloTD}">${r.documento||''}</td><td style="${estiloTD}">${r.descripcion}</td>
+      <td style="${estiloTD}">${marcaTemporal}</td><td style="${estiloTD}">${r.caja}</td><td style="${estiloTD}">${r.site}</td><td style="${estiloTD}">${r.fecha}</td>
+      <td style="${estiloTD}">${r.solicitante}</td><td style="${estiloTD}">${r.documento||''}</td><td style="${estiloTD}">${r.descripcion}</td><td style="${estiloTD}">${r.detalle||''}</td>
       <td style="${estiloTD}">${r.unidad}</td><td style="${estiloTD}">${r.cantidad}</td><td style="${estiloTD}">${r.precio.toFixed(2)}</td>
       <td style="${estiloTD}">${r.sinIgv.toFixed(2)}</td><td style="${estiloTD}">${r.total.toFixed(2)}</td><td style="${estiloTD}">${r.tipo}</td>
       <td style="${estiloTD}">${r.cuenta||''}</td><td style="${estiloTD}">${r.serviceCat||''}</td>
@@ -2446,7 +2451,7 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
     <div style="font-family:Arial; font-weight:bold; margin-top:8px; font-size:14px;">PLANILLA DE RECLASIFICACION DE CAJA CHICA</div></div>
     <table style="border-collapse:collapse; width:100%; margin-top:10px;">
       <thead><tr>${headers.map(h=>`<th style="${estiloTH}">${h}</th>`).join('')}</tr></thead>
-      <tbody>${filas || `<tr><td colspan="14" style="${estiloTD}text-align:center;">Sin registros todav&iacute;a</td></tr>`}</tbody>
+      <tbody>${filas || `<tr><td colspan="16" style="${estiloTD}text-align:center;">Sin registros todav&iacute;a</td></tr>`}</tbody>
     </table>`;
   abrirModal('Vista previa — Reclasificaci\u00f3n', html);
 });
