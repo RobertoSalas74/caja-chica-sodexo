@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.25</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.26</div>
     </div>
   </header>
 
@@ -1299,6 +1299,10 @@ function editarRegistro(modo, i){
           <option value="">&mdash; Selecciona &mdash;</option>
           ${CUENTAS.map(c=>`<option ${c===r.cuenta?'selected':''}>${c}</option>`).join('')}
         </select></div>
+        <div style="${bC}"><label>Service Category</label><br><select id="editServiceCat" style="width:100%; padding:8px;">
+          <option value="">&mdash; Selecciona &mdash;</option>
+          ${SERVICE_CATS.map(sc=>`<option ${sc===r.serviceCat?'selected':''}>${sc}</option>`).join('')}
+        </select></div>
         <button id="btnGuardarEdicion" style="width:100%; padding:10px; margin-top:6px;">Guardar cambios</button>
         <div id="editEstado" style="font-size:12px; margin-top:8px; text-align:center;"></div>
       </div>`;
@@ -1333,12 +1337,13 @@ function editarRegistro(modo, i){
         r.precio = parseFloat(document.getElementById('editPrecio').value)||0;
         r.tipo = document.getElementById('editTipo').value;
         r.cuenta = document.getElementById('editCuenta').value;
+        r.serviceCat = document.getElementById('editServiceCat').value;
         r.total = r.cantidad * r.precio;
         r.sinIgv = r.total/1.18;
         if(r.id){
           const { error } = await supabaseClient.from('comprobantes').update({
             fecha: r.fecha, solicitante: r.solicitante, documento: r.documento, descripcion: r.descripcion,
-            precio: r.precio, importe: r.total, tipo: r.tipo, cuenta: r.cuenta
+            precio: r.precio, importe: r.total, tipo: r.tipo, cuenta: r.cuenta, service_cat: r.serviceCat
           }).eq('id', r.id);
           if(error) throw error;
         }
