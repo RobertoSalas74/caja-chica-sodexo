@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.24</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.25</div>
     </div>
   </header>
 
@@ -2419,13 +2419,14 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
     ['PLANNILLA REF AFECTO', sumaRefAfecto, 'Refacturable'],
     ['PLANNILLA REF INAFECTO', sumaRefInafecto, 'Refacturable']
   ];
-  const headers = ['#Caja','Site','Fecha','Solicitante','N&deg; Doc','Descripci&oacute;n','Unidad','Cant','Precio','Sin IGV','Total','Tipo Gasto'];
+  const headers = ['#Caja','Site','Fecha','Solicitante','N&deg; Doc','Descripci&oacute;n','Unidad','Cant','Precio','Sin IGV','Total','Tipo Gasto','Cuenta Contable','Service Category'];
   let filas = filasResumen.map(([desc,monto,tipo])=>`
     <tr>
       <td style="${estiloTD}">${numCajaResumen}</td><td style="${estiloTD}">SANTA CLARA</td><td style="${estiloTD}"></td>
       <td style="${estiloTD}"></td><td style="${estiloTD}"></td><td style="${estiloTD}">${desc}</td>
       <td style="${estiloTD}">SOLES</td><td style="${estiloTD}">1</td><td style="${estiloTD}">${monto.toFixed(2)}</td>
       <td style="${estiloTD}">${(monto/1.18).toFixed(2)}</td><td style="${estiloTD}">${monto.toFixed(2)}</td><td style="${estiloTD}">${tipo}</td>
+      <td style="${estiloTD}"></td><td style="${estiloTD}"></td>
     </tr>`).join('');
   filas += registros.map(r=>`
     <tr>
@@ -2433,13 +2434,14 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
       <td style="${estiloTD}">${r.solicitante}</td><td style="${estiloTD}">${r.documento||''}</td><td style="${estiloTD}">${r.descripcion}</td>
       <td style="${estiloTD}">${r.unidad}</td><td style="${estiloTD}">${r.cantidad}</td><td style="${estiloTD}">${r.precio.toFixed(2)}</td>
       <td style="${estiloTD}">${r.sinIgv.toFixed(2)}</td><td style="${estiloTD}">${r.total.toFixed(2)}</td><td style="${estiloTD}">${r.tipo}</td>
+      <td style="${estiloTD}">${r.cuenta||''}</td><td style="${estiloTD}">${r.serviceCat||''}</td>
     </tr>`).join('');
   const html = `
     <div style="padding:16px 20px 0;"><b style="font-family:Arial;">SODEXO PERU SAC</b><br><span style="font-family:Arial; font-size:12px;">RUC 20414766308</span>
     <div style="font-family:Arial; font-weight:bold; margin-top:8px; font-size:14px;">PLANILLA DE RECLASIFICACION DE CAJA CHICA</div></div>
     <table style="border-collapse:collapse; width:100%; margin-top:10px;">
       <thead><tr>${headers.map(h=>`<th style="${estiloTH}">${h}</th>`).join('')}</tr></thead>
-      <tbody>${filas || `<tr><td colspan="12" style="${estiloTD}text-align:center;">Sin registros todav&iacute;a</td></tr>`}</tbody>
+      <tbody>${filas || `<tr><td colspan="14" style="${estiloTD}text-align:center;">Sin registros todav&iacute;a</td></tr>`}</tbody>
     </table>`;
   abrirModal('Vista previa — Reclasificaci\u00f3n', html);
 });
