@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.22</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.23</div>
     </div>
   </header>
 
@@ -1128,7 +1128,8 @@ document.getElementById('btnAgregarFactura').addEventListener('click', async ()=
     try{
       const evidenciaUrl = await subirEvidenciaAStorage(evidenciaFacturaActual, 'comprobantes');
       await supabaseClient.from('comprobantes').insert({
-        caja_id: cajaIdActual, fecha, descripcion, documento, importe: total, evidencia_url: evidenciaUrl
+        caja_id: cajaIdActual, fecha, descripcion, documento, importe: total, evidencia_url: evidenciaUrl,
+        solicitante, tipo, cuenta, service_cat: serviceCat, detalle, cantidad, precio
       });
     } catch(e){ console.warn('No se pudo sincronizar el comprobante con Supabase:', e.message); }
   }
@@ -1194,7 +1195,7 @@ document.getElementById('btnAgregarMovilidad').addEventListener('click', async (
     try{
       const evidenciaUrl = await subirEvidenciaAStorage(evidenciaMovilidadActual, 'vales');
       await supabaseClient.from('vales_movilidad').insert({
-        caja_id: cajaIdActual, fecha, solicitante, dni, motivo: descripcion, origen_destino: origenDestino, importe: total, autorizante: autorizanteActual, evidencia_url: evidenciaUrl
+        caja_id: cajaIdActual, fecha, solicitante, dni, motivo: descripcion, origen_destino: origenDestino, importe: total, autorizante: autorizanteActual, evidencia_url: evidenciaUrl, tipo
       });
     } catch(e){ console.warn('No se pudo sincronizar el vale con Supabase:', e.message); }
   }
@@ -2201,14 +2202,14 @@ async function restaurarCajaDesdeSupabase(){
       ]);
 
       if(comp) registros = comp.map(r=>({
-        caja: c.numero, site:'SANTA CLARA', fecha:r.fecha, solicitante:'', documento:r.documento||'',
-        descripcion:r.descripcion, detalle:'', unidad:'SOLES', cantidad:1, precio:parseFloat(r.importe),
-        sinIgv: parseFloat(r.importe)/1.18, total:parseFloat(r.importe), tipo:'', cuenta:'', serviceCat:'',
+        caja: c.numero, site:'SANTA CLARA', fecha:r.fecha, solicitante:r.solicitante||'', documento:r.documento||'',
+        descripcion:r.descripcion, detalle:r.detalle||'', unidad:'SOLES', cantidad:parseFloat(r.cantidad)||1, precio:parseFloat(r.precio)||parseFloat(r.importe),
+        sinIgv: parseFloat(r.importe)/1.18, total:parseFloat(r.importe), tipo:r.tipo||'', cuenta:r.cuenta||'', serviceCat:r.service_cat||'',
         evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null
       }));
       if(vales) registrosMov = vales.map(r=>{
         const total = parseFloat(r.importe);
-        return { fecha:r.fecha, dni:r.dni||'', solicitante:r.solicitante, tipo:'', descripcion:r.motivo||'',
+        return { fecha:r.fecha, dni:r.dni||'', solicitante:r.solicitante, tipo:r.tipo||'', descripcion:r.motivo||'',
           origenDestino:r.origen_destino||'', total, afecto: Math.min(total,AFECTO_LIMITE), inafecto: Math.max(0,total-AFECTO_LIMITE),
           fotoManual:null, evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null };
       });
