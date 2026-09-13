@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.30</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.31</div>
     </div>
   </header>
 
@@ -2547,8 +2547,10 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
   const saldoBanco = calcularSaldoActualBanco();
   const totalEfectivo = saldoBanco; // billetes/monedas fisicos se cuentan en 0 hasta que se ingresen manualmente
   const fondoFijo = fondoFijoActivo;
-  const importeTotal = totalComprobantes + totalVales + totalPendientes;
-  const diferencia = importeTotal - fondoFijo;
+  // El fondo se va "consumiendo" entre lo que queda en banco y lo que ya se gasto (comprobantes+vales+pendientes).
+  // Si todo esta registrado correctamente, Fondo Fijo - (Banco + Comprobantes + Vales + Pendientes) = 0
+  const importeTotal = saldoBanco + totalComprobantes + totalVales + totalPendientes;
+  const diferencia = fondoFijo - importeTotal;
 
   const bF = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:2px 6px;';
   const bFc = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:2px 6px; text-align:center;';
@@ -2621,7 +2623,7 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
 
       <table style="border-collapse:collapse; width:100%; margin-bottom:14px;">
         <tr><td style="${bH}">FONDO FIJO ASIGNADO</td><td style="${bFr}">S/. ${fondoFijo.toFixed(2)}</td></tr>
-        <tr><td style="${bH}">IMPORTE TOTAL CAJA (2+3+4)</td><td style="${bFr}">S/. ${importeTotal.toFixed(2)}</td></tr>
+        <tr><td style="${bH}">IMPORTE TOTAL CAJA (BANCO+2+3+4)</td><td style="${bFr}">S/. ${importeTotal.toFixed(2)}</td></tr>
         <tr><td style="${bH}">DIFERENCIA</td><td style="${bFr}color:${Math.abs(diferencia)<0.01?'green':'red'}; font-weight:bold;">S/. ${diferencia.toFixed(2)}</td></tr>
       </table>
 
