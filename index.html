@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.27</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.28</div>
     </div>
   </header>
 
@@ -1110,9 +1110,11 @@ document.getElementById('btnAgregarFactura').addEventListener('click', async ()=
   }
   const get = id => document.getElementById(id).value.trim();
   const caja = get('fCaja'), fecha = get('fFecha'), solicitante = get('fSolicitante'),
-        documento = get('fDocumento'), descripcion = get('fDescripcion'), detalle = get('fDetalle'),
+        documento = get('fDocumento'), descripcion = get('fDescripcion'),
         cantidad = parseFloat(get('fCantidad'))||0, precio = parseFloat(get('fPrecio'))||0,
         tipo = get('fTipo'), cuenta = get('fCuenta'), serviceCat = get('fServiceCat');
+  // Si dejas "Detalle" vacio, se usa la Descripcion automaticamente (nunca debe quedar en blanco en Reclasificacion)
+  const detalle = get('fDetalle') || descripcion;
 
   if(!fecha || !solicitante || !descripcion || !precio || !tipo || !cuenta){
     showAlert(alertBoxFactura, 'Completa al menos: Fecha, Solicitante, Descripci\u00f3n, Precio, Tipo de gasto y Cuenta contable.');
@@ -1335,7 +1337,7 @@ function editarRegistro(modo, i){
         r.solicitante = document.getElementById('editSolicitante').value;
         r.documento = document.getElementById('editDocumento').value;
         r.descripcion = document.getElementById('editDescripcion').value;
-        r.detalle = document.getElementById('editDetalle').value;
+        r.detalle = document.getElementById('editDetalle').value.trim() || r.descripcion;
         r.precio = parseFloat(document.getElementById('editPrecio').value)||0;
         r.tipo = document.getElementById('editTipo').value;
         r.cuenta = document.getElementById('editCuenta').value;
