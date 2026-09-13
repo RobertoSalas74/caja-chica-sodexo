@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '7';
+const APP_VERSION_CAPTURA = '8';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -162,8 +162,13 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
       <div id="pdfPreview" style="display:none; padding:20px; text-align:center; background:#fff; border:1px solid #d5d9ea; border-radius:6px; font-family:monospace;">&#128196; PDF listo para enviar</div>
 
       <div id="bloqueAdjuntoExtra" style="display:none; margin-top:12px; padding:12px; background:#fff; border:1px dashed #9aa; border-radius:6px;">
-        <div style="font-family:monospace; font-size:12px; margin-bottom:8px;">&#128206; Comprobante adicional (opcional, ej. recibo de taxi/app) &mdash; queda por separado</div>
-        <input type="file" id="inputAdjuntoExtra" accept="image/*,application/pdf">
+        <div style="font-family:monospace; font-size:12px; margin-bottom:10px;">&#128206; Comprobante adicional (opcional, ej. recibo de taxi/app) &mdash; queda por separado</div>
+        <div class="actions" style="margin-top:0;">
+          <button class="accion" id="btnAbrirCamaraExtra" type="button">&#128248; Tomar foto</button>
+          <button class="accion" id="btnAbrirArchivosExtra" type="button">&#128193; Adjuntar archivo</button>
+        </div>
+        <input type="file" id="inputCamaraExtra" accept="image/*" capture="environment" style="display:none;">
+        <input type="file" id="inputArchivoExtra" accept="image/*,application/pdf" style="display:none;">
         <div id="previewExtra" style="display:none; margin-top:8px;">
           <img id="imgPreviewExtra" src="" alt="Adjunto extra" style="max-width:100%; max-height:150px; display:block; border-radius:4px;">
           <div id="pdfPreviewExtra" style="display:none; padding:10px; text-align:center; background:#f4f4fa; border-radius:4px; font-family:monospace; font-size:12px;">&#128196; PDF adjunto listo</div>
@@ -372,8 +377,7 @@ inputArchivo.addEventListener('change', (e)=> manejarArchivoSeleccionado(e.targe
 
 let archivoExtra = null;
 
-document.getElementById('inputAdjuntoExtra').addEventListener('change', (e)=>{
-  const file = e.target.files[0];
+function manejarArchivoExtraSeleccionado(file){
   if(!file) return;
   archivoExtra = file;
   const previewExtra = document.getElementById('previewExtra');
@@ -388,12 +392,18 @@ document.getElementById('inputAdjuntoExtra').addEventListener('change', (e)=>{
     imgPreviewExtra.src = URL.createObjectURL(file);
   }
   previewExtra.style.display = 'block';
-});
+}
+
+document.getElementById('btnAbrirCamaraExtra').addEventListener('click', ()=> document.getElementById('inputCamaraExtra').click());
+document.getElementById('btnAbrirArchivosExtra').addEventListener('click', ()=> document.getElementById('inputArchivoExtra').click());
+document.getElementById('inputCamaraExtra').addEventListener('change', (e)=> manejarArchivoExtraSeleccionado(e.target.files[0]));
+document.getElementById('inputArchivoExtra').addEventListener('change', (e)=> manejarArchivoExtraSeleccionado(e.target.files[0]));
 
 document.getElementById('btnQuitarExtra').addEventListener('click', ()=>{
   archivoExtra = null;
   document.getElementById('previewExtra').style.display = 'none';
-  document.getElementById('inputAdjuntoExtra').value = '';
+  document.getElementById('inputCamaraExtra').value = '';
+  document.getElementById('inputArchivoExtra').value = '';
 });
 
 document.getElementById('btnDescartar').addEventListener('click', ()=>{
@@ -402,7 +412,8 @@ document.getElementById('btnDescartar').addEventListener('click', ()=>{
   preview.style.display = 'none';
   document.getElementById('bloqueAdjuntoExtra').style.display = 'none';
   document.getElementById('previewExtra').style.display = 'none';
-  document.getElementById('inputAdjuntoExtra').value = '';
+  document.getElementById('inputCamaraExtra').value = '';
+  document.getElementById('inputArchivoExtra').value = '';
   inputCamara.value = '';
   inputArchivo.value = '';
 });
@@ -520,7 +531,8 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
     preview.style.display = 'none';
     document.getElementById('bloqueAdjuntoExtra').style.display = 'none';
     document.getElementById('previewExtra').style.display = 'none';
-    document.getElementById('inputAdjuntoExtra').value = '';
+    document.getElementById('inputCamaraExtra').value = '';
+    document.getElementById('inputArchivoExtra').value = '';
     inputCamara.value = ''; inputArchivo.value = '';
     document.getElementById('firmaNombre').value = '';
   }
