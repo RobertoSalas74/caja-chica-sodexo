@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '6';
+const APP_VERSION_CAPTURA = '7';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -160,6 +160,17 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
     <div class="preview" id="preview" style="display:none;">
       <img id="imgPreview" src="" alt="Vista previa">
       <div id="pdfPreview" style="display:none; padding:20px; text-align:center; background:#fff; border:1px solid #d5d9ea; border-radius:6px; font-family:monospace;">&#128196; PDF listo para enviar</div>
+
+      <div id="bloqueAdjuntoExtra" style="display:none; margin-top:12px; padding:12px; background:#fff; border:1px dashed #9aa; border-radius:6px;">
+        <div style="font-family:monospace; font-size:12px; margin-bottom:8px;">&#128206; Comprobante adicional (opcional, ej. recibo de taxi/app) &mdash; queda por separado</div>
+        <input type="file" id="inputAdjuntoExtra" accept="image/*,application/pdf">
+        <div id="previewExtra" style="display:none; margin-top:8px;">
+          <img id="imgPreviewExtra" src="" alt="Adjunto extra" style="max-width:100%; max-height:150px; display:block; border-radius:4px;">
+          <div id="pdfPreviewExtra" style="display:none; padding:10px; text-align:center; background:#f4f4fa; border-radius:4px; font-family:monospace; font-size:12px;">&#128196; PDF adjunto listo</div>
+          <button class="accion" id="btnQuitarExtra" style="margin-top:6px; padding:6px 10px; font-size:12px;">&#10060; Quitar adjunto</button>
+        </div>
+      </div>
+
       <div class="actions">
         <button class="accion" id="btnDescartar">&#128465; Descartar</button>
         <button class="accion principal" id="btnGuardar">&#9757; Enviar a la laptop</button>
@@ -262,6 +273,9 @@ document.getElementById('btnVolverMenu').addEventListener('click', ()=>{
   panelCaptura.style.display = 'none';
   preview.style.display = 'none';
   archivoActual = null;
+  archivoExtra = null;
+  const bloqueExtra = document.getElementById('bloqueAdjuntoExtra');
+  if(bloqueExtra) bloqueExtra.style.display = 'none';
   tipoSeleccionado = null;
 });
 
@@ -316,6 +330,7 @@ function continuarConArchivo(file){
   pdfPreview.style.display = 'none';
   imgPreview.src = URL.createObjectURL(file);
   preview.style.display = 'block';
+  document.getElementById('bloqueAdjuntoExtra').style.display = (tipoSeleccionado === 'voucher_movilidad') ? 'block' : 'none';
 }
 
 document.getElementById('btnUsarCompleta').addEventListener('click', (e)=>{
@@ -355,9 +370,39 @@ document.getElementById('btnRecortarContinuar').addEventListener('click', (e)=>{
 inputCamara.addEventListener('change', (e)=> manejarArchivoSeleccionado(e.target.files[0]));
 inputArchivo.addEventListener('change', (e)=> manejarArchivoSeleccionado(e.target.files[0]));
 
+let archivoExtra = null;
+
+document.getElementById('inputAdjuntoExtra').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  archivoExtra = file;
+  const previewExtra = document.getElementById('previewExtra');
+  const imgPreviewExtra = document.getElementById('imgPreviewExtra');
+  const pdfPreviewExtra = document.getElementById('pdfPreviewExtra');
+  if(file.type === 'application/pdf'){
+    imgPreviewExtra.style.display = 'none';
+    pdfPreviewExtra.style.display = 'block';
+  } else {
+    imgPreviewExtra.style.display = 'block';
+    pdfPreviewExtra.style.display = 'none';
+    imgPreviewExtra.src = URL.createObjectURL(file);
+  }
+  previewExtra.style.display = 'block';
+});
+
+document.getElementById('btnQuitarExtra').addEventListener('click', ()=>{
+  archivoExtra = null;
+  document.getElementById('previewExtra').style.display = 'none';
+  document.getElementById('inputAdjuntoExtra').value = '';
+});
+
 document.getElementById('btnDescartar').addEventListener('click', ()=>{
   archivoActual = null;
+  archivoExtra = null;
   preview.style.display = 'none';
+  document.getElementById('bloqueAdjuntoExtra').style.display = 'none';
+  document.getElementById('previewExtra').style.display = 'none';
+  document.getElementById('inputAdjuntoExtra').value = '';
   inputCamara.value = '';
   inputArchivo.value = '';
 });
@@ -441,15 +486,29 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
       if(error) throw error;
       agregarItemLista(`&#9989; Firma de <b>${nombre}</b> guardada de forma permanente.`);
     } else {
+      // Si hay un adjunto extra (ej. comprobante de taxi/app aparte del vale), se prepara tambien
+      let base64Extra = null, tipoExtra = null;
+      if(archivoExtra){
+        const extraParaEnviar = await redimensionarSiEsNecesario(archivoExtra);
+        tipoExtra = extraParaEnviar.type || 'image/jpeg';
+        base64Extra = await new Promise((resolve,reject)=>{
+          const reader = new FileReader();
+          reader.onload = ()=>resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(extraParaEnviar);
+        });
+      }
       const { error } = await supabaseClient.from('fotos_puente_caja129').insert({
         nombre_archivo: `${tipoSeleccionado}_${Date.now()}${archivoParaEnviar.type==='application/pdf'?'.pdf':'.jpg'}`,
         tipo_archivo: archivoParaEnviar.type || 'image/jpeg',
         tipo: tipoSeleccionado,
         data_base64: base64,
-        caja_tipo: cajaTipoSeleccionado
+        caja_tipo: cajaTipoSeleccionado,
+        tipo_archivo_2: tipoExtra,
+        data_base64_2: base64Extra
       });
       if(error) throw error;
-      agregarItemLista(`&#9989; ${NOMBRES_TIPO[tipoSeleccionado]} enviado a la laptop.`);
+      agregarItemLista(`&#9989; ${NOMBRES_TIPO[tipoSeleccionado]} enviado a la laptop.${archivoExtra ? ' Comprobante adicional incluido por separado.' : ''}`);
     }
   } catch(err){
     agregarItemLista('&#10060; Error al enviar: ' + (err && err.message ? err.message : 'intenta de nuevo, revisa tu se\u00f1al.'), true);
@@ -457,7 +516,11 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
     clearTimeout(avisoLento);
     btn.disabled = false; btn.textContent = 'Enviar a la laptop';
     archivoActual = null;
+    archivoExtra = null;
     preview.style.display = 'none';
+    document.getElementById('bloqueAdjuntoExtra').style.display = 'none';
+    document.getElementById('previewExtra').style.display = 'none';
+    document.getElementById('inputAdjuntoExtra').value = '';
     inputCamara.value = ''; inputArchivo.value = '';
     document.getElementById('firmaNombre').value = '';
   }
