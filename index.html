@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.33</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.34</div>
     </div>
   </header>
 
@@ -460,8 +460,10 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     <h2>Nuevo registro &mdash; Vale de Movilidad <button class="secondary" id="btnCambiarModo2" style="float:right; padding:4px 10px;">&larr; Cambiar</button></h2>
 
     <div style="background:var(--accent-soft); border:1px solid var(--accent); border-radius:3px; padding:12px; margin-bottom:14px;">
-      <label for="mArchivoEvidencia" style="margin-bottom:6px;">&#128206; Adjuntar comprobante (foto o PDF, sin lectura autom&aacute;tica)</label>
+      <label for="mArchivoEvidencia" style="margin-bottom:6px;">&#128206; Adjuntar vale/voucher (foto o PDF, sin lectura autom&aacute;tica)</label>
       <input type="file" id="mArchivoEvidencia" accept="application/pdf,image/*">
+      <label for="mArchivoEvidenciaExtra" style="margin-top:10px; margin-bottom:6px;">&#128206; Comprobante adicional (opcional, ej. recibo de taxi/app &mdash; queda por separado)</label>
+      <input type="file" id="mArchivoEvidenciaExtra" accept="application/pdf,image/*">
       <div class="actions" style="margin-top:10px;">
         <button class="secondary" id="btnRecibirCelularMov" style="padding:8px 14px; font-size:11px;">&#128241; Recibir fotos del celular</button>
       </div>
@@ -1210,18 +1212,20 @@ document.getElementById('btnAgregarMovilidad').addEventListener('click', async (
   // Si subiste una foto de vale, se guarda junto al registro (tiene prioridad sobre la firma guardada)
   const fotoManual = fotoValeBase64 ? { firma: fotoValeBase64, fw: fotoValeDims.w, fh: fotoValeDims.h } : null;
 
-  registrosMov.push({ fecha, dni, solicitante, tipo, descripcion, origenDestino, total, afecto, inafecto, fotoManual, evidencia: evidenciaMovilidadActual, id: null });
+  registrosMov.push({ fecha, dni, solicitante, tipo, descripcion, origenDestino, total, afecto, inafecto, fotoManual, evidencia: evidenciaMovilidadActual, evidenciaExtra: evidenciaMovilidadExtraActual, id: null });
   const registroVale = registrosMov[registrosMov.length-1];
   if(cajaIdActual){
     try{
       const evidenciaUrl = await subirEvidenciaAStorage(evidenciaMovilidadActual, 'vales');
+      const evidencia2Url = await subirEvidenciaAStorage(evidenciaMovilidadExtraActual, 'vales_extra');
       const { data, error } = await supabaseClient.from('vales_movilidad').insert({
-        caja_id: cajaIdActual, fecha, solicitante, dni, motivo: descripcion, origen_destino: origenDestino, importe: total, autorizante: autorizanteActual, evidencia_url: evidenciaUrl, tipo
+        caja_id: cajaIdActual, fecha, solicitante, dni, motivo: descripcion, origen_destino: origenDestino, importe: total, autorizante: autorizanteActual, evidencia_url: evidenciaUrl, evidencia2_url: evidencia2Url, tipo
       }).select('id').single();
       if(!error && data) registroVale.id = data.id;
     } catch(e){ console.warn('No se pudo sincronizar el vale con Supabase:', e.message); }
   }
   evidenciaMovilidadActual = null;
+  evidenciaMovilidadExtraActual = null;
   renderTabla();
   limpiarFormularioMovilidad();
   guardarEnArchivoConectado();
@@ -1293,7 +1297,7 @@ function renderTabla(){
         <td>${r.descripcion}</td>
         <td class="small">${r.origenDestino}</td>
         <td class="num">${fmt(r.total)}</td>
-        <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('movilidad',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('movilidad',${i})">Eliminar</button></td>
+        <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad',${i})">&#128065; Ver Vale</button>` : ''}${r.evidenciaExtra ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad-extra',${i})">&#128065; Ver Comprobante</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('movilidad',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('movilidad',${i})">Eliminar</button></td>
       </tr>
     `).join('');
     wrap.innerHTML = `
@@ -1420,13 +1424,16 @@ function eliminarRegistro(modo, i){
 }
 
 function verEvidencia(modo, i){
-  const r = modo==='factura' ? registros[i] : modo==='banco' ? movimientosBanco[i] : registrosMov[i];
-  if(!r || !r.evidencia) return;
-  const esPdf = (r.evidencia.tipo||'').includes('pdf');
+  const esExtra = modo === 'movilidad-extra';
+  const modoBase = esExtra ? 'movilidad' : modo;
+  const r = modoBase==='factura' ? registros[i] : modoBase==='banco' ? movimientosBanco[i] : registrosMov[i];
+  const evid = esExtra ? (r && r.evidenciaExtra) : (r && r.evidencia);
+  if(!r || !evid) return;
+  const esPdf = (evid.tipo||'').includes('pdf');
   const html = esPdf
-    ? `<iframe src="${r.evidencia.dataUrl}" style="width:100%; height:75vh; border:none;"></iframe>`
-    : `<div style="padding:16px; text-align:center;"><img src="${r.evidencia.dataUrl}" style="max-width:100%; max-height:80vh;"></div>`;
-  abrirModal('Documento adjunto — ' + (r.descripcion||r.solicitante||''), html);
+    ? `<iframe src="${evid.dataUrl}" style="width:100%; height:75vh; border:none;"></iframe>`
+    : `<div style="padding:16px; text-align:center;"><img src="${evid.dataUrl}" style="max-width:100%; max-height:80vh;"></div>`;
+  abrirModal((esExtra ? 'Comprobante adicional — ' : 'Documento adjunto — ') + (r.descripcion||r.solicitante||''), html);
 }
 
 document.getElementById('btnVaciar').addEventListener('click', ()=>{
@@ -1974,6 +1981,7 @@ async function subirEvidenciaAStorage(evidencia, carpeta){
 let evidenciaFacturaActual = null; // dataURL de la foto/PDF cargado, para "Ver documento" despues
 let evidenciaMovilidadActual = null;
 let evidenciaBancoActual = null;
+let evidenciaMovilidadExtraActual = null; // comprobante adicional del vale (ej. recibo de taxi/app), queda separado del vale/voucher principal
 
 document.getElementById('bArchivoLector').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
@@ -2143,8 +2151,11 @@ async function recibirDocumentoCelular(estadoElId){
       }
       if(datos.dni && !document.getElementById('mDni').value) document.getElementById('mDni').value = datos.dni;
       evidenciaMovilidadActual = { dataUrl: 'data:' + doc.tipo_archivo + ';base64,' + doc.data_base64, tipo: doc.tipo_archivo };
+      evidenciaMovilidadExtraActual = doc.data_base64_2
+        ? { dataUrl: 'data:' + doc.tipo_archivo_2 + ';base64,' + doc.data_base64_2, tipo: doc.tipo_archivo_2 }
+        : null;
       const camposLlenos = ['fecha','precio','concepto','origen_destino','nombre'].filter(k=>datos[k]).length;
-      mensajeResultado = `Voucher de Movilidad recibido. Se pre-llenaron ${camposLlenos} campo(s)${nombreEncontrado?' (nombre confirmado por DNI)':''}. Revisa antes de agregar (Tipo de gasto siempre debes elegirlo t\u00fa).`;
+      mensajeResultado = `Voucher de Movilidad recibido. Se pre-llenaron ${camposLlenos} campo(s)${nombreEncontrado?' (nombre confirmado por DNI)':''}.${evidenciaMovilidadExtraActual?' Comprobante adicional incluido por separado.':''} Revisa antes de agregar (Tipo de gasto siempre debes elegirlo t\u00fa).`;
 
     } else if(doc.tipo === 'voucher_banco'){
       // Pre-llena el formulario de Banco en Vivo para que el usuario revise/escriba y guarde el mismo
@@ -2189,7 +2200,21 @@ document.getElementById('mArchivoEvidencia').addEventListener('change', (e)=>{
   const reader = new FileReader();
   reader.onload = ()=>{
     evidenciaMovilidadActual = { dataUrl: reader.result, tipo: file.type };
-    estado.textContent = 'Comprobante adjuntado. Se subir\u00e1 al guardar el vale con "Agregar a Planilla de Movilidad".';
+    estado.textContent = 'Vale/voucher adjuntado. Se subir\u00e1 al guardar el vale con "Agregar a Planilla de Movilidad".';
+  };
+  reader.onerror = ()=>{ estado.textContent = 'No se pudo leer el archivo, intenta de nuevo.'; };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
+
+document.getElementById('mArchivoEvidenciaExtra').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  const estado = document.getElementById('mLectorEstado');
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    evidenciaMovilidadExtraActual = { dataUrl: reader.result, tipo: file.type };
+    estado.textContent = 'Comprobante adicional adjuntado (queda por separado del vale).';
   };
   reader.onerror = ()=>{ estado.textContent = 'No se pudo leer el archivo, intenta de nuevo.'; };
   reader.readAsDataURL(file);
@@ -2370,7 +2395,8 @@ async function restaurarCajaDesdeSupabase(){
         const total = parseFloat(r.importe);
         return { id: r.id, fecha:r.fecha, dni:r.dni||'', solicitante:r.solicitante, tipo:r.tipo||'', descripcion:r.motivo||'',
           origenDestino:r.origen_destino||'', total, afecto: Math.min(total,AFECTO_LIMITE), inafecto: Math.max(0,total-AFECTO_LIMITE),
-          fotoManual:null, evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null };
+          fotoManual:null, evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null,
+          evidenciaExtra: r.evidencia2_url ? {dataUrl:r.evidencia2_url, tipo:''} : null };
       });
       if(movBanco) movimientosBanco = movBanco.map(m=>({ id:m.id, fecha:m.fecha, tipo:m.tipo, descripcion:m.descripcion, monto:parseFloat(m.monto), evidencia: m.evidencia_url ? {dataUrl:m.evidencia_url, tipo:''} : null }));
 
