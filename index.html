@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.31</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.32</div>
     </div>
   </header>
 
@@ -523,7 +523,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     </div>
   </div>
 
-  <div class="panel">
+  <div class="panel" id="panelRegistrosSesion" style="display:none;">
 
     <h2 style="display:flex; justify-content:space-between; align-items:center; border-bottom:none; margin-bottom:10px;">
       <span>Registros de esta sesi&oacute;n</span>
@@ -935,6 +935,8 @@ const panelFactura = document.getElementById('panelFactura');
 const panelMovilidad = document.getElementById('panelMovilidad');
 const panelEfectivo = document.getElementById('panelEfectivo');
 
+let filtroTablaModo = null; // 'factura' | 'movilidad' | null — que tabla se muestra en "Registros de esta sesion"
+
 function irAModo(modo){
   panelSelector.style.display = 'none';
   panelFactura.style.display = modo==='factura' ? 'block' : 'none';
@@ -942,6 +944,16 @@ function irAModo(modo){
   panelEfectivo.style.display = modo==='efectivo' ? 'block' : 'none';
   document.getElementById('panelPersonas').style.display = modo==='personas' ? 'block' : 'none';
   if(modo==='personas') renderPersonasAdmin();
+
+  // "Registros de esta sesion" solo se muestra al elegir Factura o Movilidad, y solo con su propia tabla
+  const panelRegistros = document.getElementById('panelRegistrosSesion');
+  if(modo==='factura' || modo==='movilidad'){
+    filtroTablaModo = modo;
+    panelRegistros.style.display = 'block';
+    renderTabla();
+  } else {
+    panelRegistros.style.display = 'none';
+  }
 }
 function volverASelector(){
   panelSelector.style.display = 'block';
@@ -949,6 +961,8 @@ function volverASelector(){
   panelMovilidad.style.display = 'none';
   panelEfectivo.style.display = 'none';
   document.getElementById('panelPersonas').style.display = 'none';
+  document.getElementById('panelRegistrosSesion').style.display = 'none';
+  filtroTablaModo = null;
 }
 document.getElementById('btnModoFactura').addEventListener('click', ()=>irAModo('factura'));
 document.getElementById('btnModoMovilidad').addEventListener('click', ()=>irAModo('movilidad'));
@@ -1234,44 +1248,62 @@ function renderTabla(){
   document.getElementById('btnDescargarRespaldo').disabled = registros.length===0;
   document.getElementById('btnVaciar').disabled = totalRegistros===0;
 
-  if(totalRegistros===0){
-    wrap.innerHTML = '<div class="empty-state">A\u00fan no has agregado ning\u00fan gasto. Eleg\u00ed arriba qu\u00e9 vas a registrar.</div>';
+  if(!filtroTablaModo){
+    wrap.innerHTML = '';
     return;
   }
 
-  let rowsFactura = registros.map((r,i)=>`
-    <tr>
-      <td class="small">${r.fecha}</td>
-      <td>${r.solicitante} <span class="badge">Factura</span></td>
-      <td class="small">${r.documento||'&mdash;'}</td>
-      <td>${r.descripcion}</td>
-      <td class="small">${r.cuenta}</td>
-      <td class="num">${fmt(r.total)}</td>
-      <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('factura',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
-    </tr>
-  `).join('');
-
-  let rowsMov = registrosMov.map((r,i)=>`
-    <tr>
-      <td class="small">${r.fecha}</td>
-      <td>${r.solicitante} <span class="badge">Movilidad</span></td>
-      <td class="small">${r.dni}</td>
-      <td>${r.descripcion}</td>
-      <td class="small">${r.origenDestino}</td>
-      <td class="num">${fmt(r.total)}</td>
-      <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('movilidad',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('movilidad',${i})">Eliminar</button></td>
-    </tr>
-  `).join('');
-
-  wrap.innerHTML = `
-    <table>
-      <thead><tr>
-        <th>Fecha</th><th>Solicitante</th><th>Doc./DNI</th><th>Descripci&oacute;n</th>
-        <th>Cuenta/Ruta</th><th>Total</th><th></th>
-      </tr></thead>
-      <tbody>${rowsFactura}${rowsMov}</tbody>
-    </table>
-  `;
+  if(filtroTablaModo === 'factura'){
+    if(registros.length===0){
+      wrap.innerHTML = '<div class="empty-state">A\u00fan no has agregado ninguna factura. Complet\u00e1 el formulario de arriba.</div>';
+      return;
+    }
+    const rowsFactura = registros.map((r,i)=>`
+      <tr>
+        <td class="small">${r.fecha}</td>
+        <td>${r.solicitante}</td>
+        <td class="small">${r.documento||'&mdash;'}</td>
+        <td>${r.descripcion}</td>
+        <td class="small">${r.cuenta}</td>
+        <td class="num">${fmt(r.total)}</td>
+        <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('factura',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
+      </tr>
+    `).join('');
+    wrap.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Fecha</th><th>Solicitante</th><th>Doc./DNI</th><th>Descripci&oacute;n</th>
+          <th>Cuenta/Ruta</th><th>Total</th><th></th>
+        </tr></thead>
+        <tbody>${rowsFactura}</tbody>
+      </table>
+    `;
+  } else {
+    if(registrosMov.length===0){
+      wrap.innerHTML = '<div class="empty-state">A\u00fan no has agregado ning\u00fan vale de movilidad. Complet\u00e1 el formulario de arriba.</div>';
+      return;
+    }
+    const rowsMov = registrosMov.map((r,i)=>`
+      <tr>
+        <td class="small">${r.fecha}</td>
+        <td>${r.solicitante}</td>
+        <td class="small">${r.dni}</td>
+        <td>${r.descripcion}</td>
+        <td class="small">${r.origenDestino}</td>
+        <td class="num">${fmt(r.total)}</td>
+        <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('movilidad',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('movilidad',${i})">Eliminar</button></td>
+      </tr>
+    `).join('');
+    wrap.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Fecha</th><th>Solicitante</th><th>DNI</th><th>Descripci&oacute;n</th>
+          <th>Origen-Destino</th><th>Total</th><th></th>
+        </tr></thead>
+        <tbody>${rowsMov}</tbody>
+      </table>
+    `;
+  }
 }
 
 function editarRegistro(modo, i){
