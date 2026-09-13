@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.28</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.29</div>
     </div>
   </header>
 
@@ -1289,8 +1289,8 @@ function editarRegistro(modo, i){
           ${nombres.map(n=>`<option ${n===r.solicitante?'selected':''}>${n}</option>`).join('')}
         </select></div>
         <div style="${bC}"><label>N&deg; Documento</label><br><input type="text" id="editDocumento" value="${r.documento||''}" style="width:100%; padding:8px;"></div>
-        <div style="${bC}"><label>Descripci&oacute;n</label><br><input type="text" id="editDescripcion" value="${r.descripcion||''}" style="width:100%; padding:8px;"></div>
-        <div style="${bC}"><label>Detalle</label><br><input type="text" id="editDetalle" value="${r.detalle||''}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Descripci&oacute;n de servicio</label><br><input type="text" id="editDescripcion" value="${r.descripcion||''}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Detalle de servicio</label><br><input type="text" id="editDetalle" value="${r.detalle||''}" style="width:100%; padding:8px;"></div>
         <div style="${bC}"><label>Precio (S/)</label><br><input type="number" id="editPrecio" value="${r.precio}" style="width:100%; padding:8px;"></div>
         <div style="${bC}"><label>Tipo de gasto</label><br><select id="editTipo" style="width:100%; padding:8px;">
           <option value="">&mdash; Selecciona &mdash;</option>
