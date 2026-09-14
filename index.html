@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.37</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.38</div>
     </div>
   </header>
 
@@ -1452,6 +1452,78 @@ function eliminarRegistro(modo, i){
   guardarEnArchivoConectado();
 }
 
+// ── Visor con zoom (botones +/-, rueda del mouse, arrastrar, pellizcar en celular) para "Ver Vale/Comprobante" ──
+function inicializarVisorZoom(){
+  const img = document.getElementById('visorZoomImg');
+  const wrap = document.getElementById('visorZoomWrap');
+  if(!img || !wrap) return;
+  let escala = 1;
+  let posX = 0, posY = 0;
+  let arrastrando = false, inicioX = 0, inicioY = 0;
+  let distanciaInicialPellizco = null, escalaInicialPellizco = 1;
+
+  function aplicarTransform(){
+    img.style.transform = `translate(${posX}px, ${posY}px) scale(${escala})`;
+  }
+  function fijarEscala(nueva){
+    escala = Math.min(Math.max(nueva, 1), 6);
+    if(escala===1){ posX=0; posY=0; }
+    aplicarTransform();
+  }
+
+  document.getElementById('btnZoomIn').addEventListener('click', ()=> fijarEscala(escala+0.5));
+  document.getElementById('btnZoomOut').addEventListener('click', ()=> fijarEscala(escala-0.5));
+  document.getElementById('btnZoomReset').addEventListener('click', ()=> fijarEscala(1));
+
+  // Doble click/doble tap para alternar zoom rapido
+  img.addEventListener('dblclick', ()=> fijarEscala(escala>1 ? 1 : 2.5));
+
+  // Rueda del mouse (laptop)
+  wrap.addEventListener('wheel', (e)=>{
+    e.preventDefault();
+    fijarEscala(escala + (e.deltaY<0 ? 0.3 : -0.3));
+  }, { passive:false });
+
+  // Arrastrar con el mouse cuando esta ampliado
+  img.addEventListener('mousedown', (e)=>{
+    if(escala<=1) return;
+    arrastrando = true; inicioX = e.clientX-posX; inicioY = e.clientY-posY;
+    wrap.style.cursor = 'grabbing';
+  });
+  window.addEventListener('mousemove', (e)=>{
+    if(!arrastrando) return;
+    posX = e.clientX-inicioX; posY = e.clientY-inicioY;
+    aplicarTransform();
+  });
+  window.addEventListener('mouseup', ()=>{ arrastrando=false; wrap.style.cursor='grab'; });
+
+  // Tactil: arrastrar con un dedo, pellizcar con dos para hacer zoom
+  img.addEventListener('touchstart', (e)=>{
+    if(e.touches.length===1 && escala>1){
+      arrastrando = true;
+      inicioX = e.touches[0].clientX-posX; inicioY = e.touches[0].clientY-posY;
+    } else if(e.touches.length===2){
+      arrastrando = false;
+      const dx = e.touches[0].clientX-e.touches[1].clientX;
+      const dy = e.touches[0].clientY-e.touches[1].clientY;
+      distanciaInicialPellizco = Math.hypot(dx,dy);
+      escalaInicialPellizco = escala;
+    }
+  }, { passive:true });
+  img.addEventListener('touchmove', (e)=>{
+    if(e.touches.length===1 && arrastrando){
+      posX = e.touches[0].clientX-inicioX; posY = e.touches[0].clientY-inicioY;
+      aplicarTransform();
+    } else if(e.touches.length===2 && distanciaInicialPellizco){
+      const dx = e.touches[0].clientX-e.touches[1].clientX;
+      const dy = e.touches[0].clientY-e.touches[1].clientY;
+      const distanciaAhora = Math.hypot(dx,dy);
+      fijarEscala(escalaInicialPellizco * (distanciaAhora/distanciaInicialPellizco));
+    }
+  }, { passive:true });
+  img.addEventListener('touchend', ()=>{ arrastrando=false; distanciaInicialPellizco=null; });
+}
+
 function verEvidencia(modo, i){
   const esExtra = modo === 'movilidad-extra';
   const modoBase = esExtra ? 'movilidad' : modo;
@@ -1461,8 +1533,19 @@ function verEvidencia(modo, i){
   const esPdf = (evid.tipo||'').includes('pdf');
   const html = esPdf
     ? `<iframe src="${evid.dataUrl}" style="width:100%; height:75vh; border:none;"></iframe>`
-    : `<div style="padding:16px; text-align:center;"><img src="${evid.dataUrl}" style="max-width:100%; max-height:80vh;"></div>`;
+    : `
+      <div style="position:relative;">
+        <div id="visorZoomActions" style="position:sticky; top:0; z-index:5; display:flex; gap:6px; justify-content:center; padding:8px; background:#fff; border-bottom:1px solid var(--line);">
+          <button type="button" id="btnZoomOut" style="padding:6px 14px; font-size:16px;">&minus;</button>
+          <button type="button" id="btnZoomReset" style="padding:6px 14px; font-size:12px;">Restablecer</button>
+          <button type="button" id="btnZoomIn" style="padding:6px 14px; font-size:16px;">&plus;</button>
+        </div>
+        <div id="visorZoomWrap" style="overflow:auto; max-height:75vh; text-align:center; background:#eee; cursor:grab; touch-action:none;">
+          <img id="visorZoomImg" src="${evid.dataUrl}" style="max-width:100%; display:block; margin:0 auto; transform-origin:0 0; transition:transform .1s ease-out; user-select:none;" draggable="false">
+        </div>
+      </div>`;
   abrirModal((esExtra ? 'Comprobante adicional — ' : 'Documento adjunto — ') + (r.descripcion||r.solicitante||''), html);
+  if(!esPdf) inicializarVisorZoom();
 }
 
 document.getElementById('btnVaciar').addEventListener('click', ()=>{
