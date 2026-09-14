@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.39</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.40</div>
     </div>
   </header>
 
@@ -431,6 +431,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
           <option>Gasto Sodexo</option>
           <option>Gasto No controlable</option>
           <option>Refacturable</option>
+          <option>Vale Provisional</option>
         </select>
       </div>
       <div class="span2">
@@ -1338,6 +1339,7 @@ function editarRegistro(modo, i){
           <option ${r.tipo==='Gasto Sodexo'?'selected':''}>Gasto Sodexo</option>
           <option ${r.tipo==='Gasto No controlable'?'selected':''}>Gasto No controlable</option>
           <option ${r.tipo==='Refacturable'?'selected':''}>Refacturable</option>
+          <option ${r.tipo==='Vale Provisional'?'selected':''}>Vale Provisional</option>
         </select></div>
         <div style="${bC}"><label>Cuenta contable</label><br><select id="editCuenta" style="width:100%; padding:8px;">
           <option value="">&mdash; Selecciona &mdash;</option>
@@ -1611,8 +1613,20 @@ function construirHojaReclasificacion(wb, headers, anchos, filas){
     }
   });
 
+  // Fila de TOTAL A REEMBOLSAR: suma la columna Total (M) excluyendo las filas marcadas como "Vale Provisional"
+  // (esas son prestamos/adelantos que Sodexo no reembolsa hasta que se liquiden)
+  const primeraFilaDatos = 7;
+  const ultimaFilaDatos = 6 + filas.length;
+  const filaTotal = ultimaFilaDatos + 2;
+  ws.getCell(`F${filaTotal}`).value = 'TOTAL A REEMBOLSAR (excluye Vale Provisional):';
+  ws.getCell(`F${filaTotal}`).font = { name:'Arial', size:11, bold:true };
+  ws.getCell(`M${filaTotal}`).value = { formula: `SUMIF(N${primeraFilaDatos}:N${ultimaFilaDatos},"<>Vale Provisional",M${primeraFilaDatos}:M${ultimaFilaDatos})` };
+  ws.getCell(`M${filaTotal}`).font = { name:'Arial', size:11, bold:true };
+  ws.getCell(`M${filaTotal}`).numberFormat = '0.00';
+  ws.getCell(`M${filaTotal}`).border = { top:{style:'thin'} };
+
   // Configuracion de impresion identica al archivo oficial (verificada: scale 70, sin fitToPage)
-  ws.pageSetup.printArea = `B1:P${6+filas.length}`;
+  ws.pageSetup.printArea = `B1:P${filaTotal}`;
   ws.pageSetup.orientation = 'landscape';
   ws.pageSetup.paperSize = 9;
   ws.pageSetup.scale = 70;
@@ -2677,21 +2691,29 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
       <td style="${estiloTD}">${(monto/1.18).toFixed(2)}</td><td style="${estiloTD}">${monto.toFixed(2)}</td><td style="${estiloTD}">${tipo}</td>
       <td style="${estiloTD}"></td><td style="${estiloTD}"></td>
     </tr>`).join('');
-  filas += registros.map(r=>`
-    <tr>
+  filas += registros.map(r=>{
+    const esProvisional = r.tipo === 'Vale Provisional';
+    const estiloFila = esProvisional ? 'background:#fff3cd;' : '';
+    return `
+    <tr style="${estiloFila}">
       <td style="${estiloTD}">${marcaTemporal}</td><td style="${estiloTD}">${r.caja}</td><td style="${estiloTD}">${r.site}</td><td style="${estiloTD}">${r.fecha}</td>
       <td style="${estiloTD}">${r.solicitante}</td><td style="${estiloTD}">${r.documento||''}</td><td style="${estiloTD}">${r.descripcion}</td><td style="${estiloTD}">${r.detalle||''}</td>
       <td style="${estiloTD}">${r.unidad}</td><td style="${estiloTD}">${r.cantidad}</td><td style="${estiloTD}">${r.precio.toFixed(2)}</td>
-      <td style="${estiloTD}">${r.sinIgv.toFixed(2)}</td><td style="${estiloTD}">${r.total.toFixed(2)}</td><td style="${estiloTD}">${r.tipo}</td>
+      <td style="${estiloTD}">${r.sinIgv.toFixed(2)}</td><td style="${estiloTD}">${r.total.toFixed(2)}</td><td style="${estiloTD}${esProvisional?'font-weight:bold;color:#b8860b;':''}">${r.tipo}${esProvisional?' &#9888;&#65039;':''}</td>
       <td style="${estiloTD}">${r.cuenta||''}</td><td style="${estiloTD}">${r.serviceCat||''}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
+  const totalReembolsar = registros.filter(r=>r.tipo!=='Vale Provisional').reduce((s,r)=>s+r.total,0);
   const html = `
     <div style="padding:16px 20px 0;"><b style="font-family:Arial;">SODEXO PERU SAC</b><br><span style="font-family:Arial; font-size:12px;">RUC 20414766308</span>
     <div style="font-family:Arial; font-weight:bold; margin-top:8px; font-size:14px;">PLANILLA DE RECLASIFICACION DE CAJA CHICA</div></div>
     <table style="border-collapse:collapse; width:100%; margin-top:10px;">
       <thead><tr>${headers.map(h=>`<th style="${estiloTH}">${h}</th>`).join('')}</tr></thead>
       <tbody>${filas || `<tr><td colspan="16" style="${estiloTD}text-align:center;">Sin registros todav&iacute;a</td></tr>`}</tbody>
-    </table>`;
+    </table>
+    <div style="padding:10px 20px; font-family:Arial; font-weight:bold; text-align:right; font-size:13px;">
+      TOTAL A REEMBOLSAR (excluye Vale Provisional): S/ ${totalReembolsar.toFixed(2)}
+    </div>`;
   abrirModal('Vista previa — Reclasificaci\u00f3n', html);
 });
 
