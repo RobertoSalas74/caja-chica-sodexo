@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.41</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.42</div>
     </div>
   </header>
 
@@ -1276,7 +1276,7 @@ function renderTabla(){
         <td>${r.descripcion}</td>
         <td class="small">${r.cuenta}</td>
         <td class="num">${fmt(r.total)}</td>
-        <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('factura',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
+        <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}${(r.tipo==='Gasto Sodexo'||r.tipo==='Refacturable') ? `<button class="del-btn" style="color:#6a4fb0;" onclick="copiarMensajeFactura(${i},this)">&#128203; Copiar</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('factura',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
       </tr>
     `).join('');
     wrap.innerHTML = `
@@ -1446,6 +1446,28 @@ function editarRegistro(modo, i){
       estado.textContent = 'Error al guardar: ' + err.message;
     }
   });
+}
+
+// ── Copiar mensaje de aprobacion (Factura) al portapapeles ──
+async function copiarAlPortapapeles(texto, btnEl){
+  try{
+    await navigator.clipboard.writeText(texto);
+    if(btnEl){
+      const original = btnEl.textContent;
+      btnEl.textContent = '\u2705 Copiado';
+      setTimeout(()=>{ btnEl.textContent = original; }, 1500);
+    }
+  } catch(e){
+    alert('No se pudo copiar autom\u00e1ticamente. Copia manualmente:\n\n' + texto);
+  }
+}
+
+function copiarMensajeFactura(i, btnEl){
+  const r = registros[i];
+  if(!r) return;
+  const etiquetaTipo = r.tipo === 'Gasto Sodexo' ? 'GASTO' : 'REFACTURABLE';
+  const texto = `CAJA ${cajaActiva} ${etiquetaTipo}\n\n${r.descripcion}\n${r.detalle||''}\n\n${autorizanteActual}`;
+  copiarAlPortapapeles(texto, btnEl);
 }
 
 function eliminarRegistro(modo, i){
@@ -2726,6 +2748,18 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
   abrirModal('Vista previa — Reclasificaci\u00f3n', html);
 });
 
+// ── Copiar mensaje de aprobacion (Vale de Movilidad), agrupado por categoria ──
+function copiarMensajeMovilidad(tipoGasto, esInafecto, btnEl){
+  const lista = registrosMov.filter(r => r.tipo===tipoGasto && (esInafecto ? r.inafecto>0 : r.afecto>0));
+  if(lista.length===0) return;
+  const nombresUnicos = [];
+  lista.forEach(r=>{ if(!nombresUnicos.includes(r.solicitante)) nombresUnicos.push(r.solicitante); });
+  const etiquetaTipo = tipoGasto === 'Gasto Sodexo' ? 'GASTO' : 'REFACTURABLE';
+  const sufijo = esInafecto ? ' INAFECTO' : '';
+  const texto = `CAJA ${cajaActiva} PLANILLA MOVILIDAD ${etiquetaTipo}${sufijo}\n\n${nombresUnicos.join('\n')}\n\n${autorizanteActual}`;
+  copiarAlPortapapeles(texto, btnEl);
+}
+
 document.getElementById('btnVerMovilidad').addEventListener('click', ()=>{
   const bG = 'border:2px solid #000; font-family:Arial; font-size:11px; padding:4px 8px; text-align:center;';
   const bF = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:4px 8px;';
@@ -2792,12 +2826,24 @@ document.getElementById('btnVerMovilidad').addEventListener('click', ()=>{
   const refact = registrosMov.filter(r=>r.tipo==='Refacturable');
   const numCaja = cajaActiva || (ultimaCajaCerrada ? parseInt(ultimaCajaCerrada)+1 : '');
   const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  const hayGastoAfecto = gasto.some(r=>r.afecto>0);
+  const hayGastoInafecto = gasto.some(r=>r.inafecto>0);
+  const hayRefAfecto = refact.some(r=>r.afecto>0);
+  const hayRefInafecto = refact.some(r=>r.inafecto>0);
+  const botonCopiar = (label, tipoGasto, esInafecto) =>
+    `<button onclick="copiarMensajeMovilidad('${tipoGasto}',${esInafecto},this)" style="padding:8px 12px; font-size:11px; background:#6a4fb0; color:#fff; border:none; border-radius:3px; cursor:pointer;">&#128203; ${label}</button>`;
   const html = `
     <div style="padding:16px 20px 0; display:flex; justify-content:space-between; align-items:center;">
       <img src="data:image/png;base64,${LOGO_SODEXO_B64}" style="height:30px;">
       <span style="font-family:Arial; font-size:12px;">PERIODO: ${MESES[new Date().getMonth()]}</span>
     </div>
     <div style="text-align:center; padding:6px 0;"><b style="font-family:Arial; font-size:16px;">PLANILLA DE MOVILIDAD</b></div>
+    <div style="padding:0 20px 10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
+      ${hayGastoAfecto ? botonCopiar('Copiar Gasto', 'Gasto Sodexo', false) : ''}
+      ${hayGastoInafecto ? botonCopiar('Copiar Gasto Inafecto', 'Gasto Sodexo', true) : ''}
+      ${hayRefAfecto ? botonCopiar('Copiar Refacturable', 'Refacturable', false) : ''}
+      ${hayRefInafecto ? botonCopiar('Copiar Refacturable Inafecto', 'Refacturable', true) : ''}
+    </div>
     <div style="padding:0 20px 16px;">
     ${filasHtml(gasto, 'Hoja: Gasto') || ''}
     ${filasHtml(refact, 'Hoja: Refact') || ''}
