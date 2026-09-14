@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '10';
+const APP_VERSION_CAPTURA = '11';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -202,6 +202,10 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
   <div style="flex:1; position:relative; overflow:hidden;">
     <img id="imgParaRecortar" src="" alt="Recortar" style="display:block; max-width:100%;">
   </div>
+  <div style="padding:10px 14px 0; background:#111; display:flex; gap:10px; justify-content:center;">
+    <button class="accion" id="btnRotarIzq" type="button" style="background:#333; color:#fff; padding:8px 16px;">&#8634; Rotar</button>
+    <button class="accion" id="btnRotarDer" type="button" style="background:#333; color:#fff; padding:8px 16px;">&#8635; Rotar</button>
+  </div>
   <div style="padding:14px; background:#111; display:flex; gap:10px;">
     <button class="accion" id="btnUsarCompleta" style="background:#fff;">Usar foto completa</button>
     <button class="accion principal" id="btnRecortarContinuar" style="background:var(--ok); color:#fff; border-color:var(--ok);">&#9986;&#65039; Recortar y continuar</button>
@@ -307,6 +311,7 @@ function manejarArchivoSeleccionado(file){
 // (ya sea recortado o completo). Reutilizable para cualquier foto de la app.
 function abrirEditorRecorte(file, onListo){
   overlayRecorte._callbackListo = onListo;
+  rotacionAplicada = 0;
   // Si la libreria de recorte no cargo (red lenta, CDN bloqueado), se usa la foto completa sin recorte
   if(typeof Cropper === 'undefined'){
     onListo(file);
@@ -343,13 +348,35 @@ function continuarConArchivo(file){
   document.getElementById('bloqueAdjuntoExtra').style.display = (tipoSeleccionado === 'voucher_movilidad') ? 'block' : 'none';
 }
 
+let rotacionAplicada = 0; // grados rotados en la sesion de recorte actual (solo informativo)
+
+document.getElementById('btnRotarIzq').addEventListener('click', ()=>{
+  if(cropperInstance){ cropperInstance.rotate(-90); rotacionAplicada -= 90; }
+});
+document.getElementById('btnRotarDer').addEventListener('click', ()=>{
+  if(cropperInstance){ cropperInstance.rotate(90); rotacionAplicada += 90; }
+});
+
 document.getElementById('btnUsarCompleta').addEventListener('click', (e)=>{
   e.target.disabled = true;
-  overlayRecorte.style.display = 'none';
-  if(cropperInstance){ try{ cropperInstance.destroy(); }catch(_){} cropperInstance = null; }
   const callback = overlayRecorte._callbackListo || continuarConArchivo;
-  callback(overlayRecorte._archivoOriginal);
-  e.target.disabled = false;
+  const finalizar = (file)=>{
+    overlayRecorte.style.display = 'none';
+    if(cropperInstance){ try{ cropperInstance.destroy(); }catch(_){} cropperInstance = null; }
+    rotacionAplicada = 0;
+    callback(file);
+    e.target.disabled = false;
+  };
+  // Si se roto la imagen, se exporta el canvas completo (con la rotacion aplicada) en vez del archivo original sin tocar
+  if(cropperInstance && rotacionAplicada !== 0 && typeof cropperInstance.getCanvas === 'function'){
+    const tipoOriginal = overlayRecorte.dataset.archivoOriginalTipo || 'image/jpeg';
+    const canvasCompleto = cropperInstance.getCanvas({ imageSmoothingQuality: 'high' });
+    canvasCompleto.toBlob((blob)=>{
+      finalizar(new File([blob], 'foto.jpg', { type: tipoOriginal.includes('png') ? 'image/png' : 'image/jpeg' }));
+    }, tipoOriginal.includes('png') ? 'image/png' : 'image/jpeg', 0.92);
+  } else {
+    finalizar(overlayRecorte._archivoOriginal);
+  }
 });
 
 document.getElementById('btnRecortarContinuar').addEventListener('click', (e)=>{
