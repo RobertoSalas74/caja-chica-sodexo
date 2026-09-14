@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '8';
+const APP_VERSION_CAPTURA = '9';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -172,8 +172,10 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
         <div id="previewExtra" style="display:none; margin-top:8px;">
           <img id="imgPreviewExtra" src="" alt="Adjunto extra" style="max-width:100%; max-height:150px; display:block; border-radius:4px;">
           <div id="pdfPreviewExtra" style="display:none; padding:10px; text-align:center; background:#f4f4fa; border-radius:4px; font-family:monospace; font-size:12px;">&#128196; PDF adjunto listo</div>
+          <button class="accion" id="btnAgregarSegundaExtra" type="button" style="margin-top:6px; padding:6px 10px; font-size:12px; display:none;">&#10133; Agregar otra foto (ida/vuelta)</button>
           <button class="accion" id="btnQuitarExtra" style="margin-top:6px; padding:6px 10px; font-size:12px;">&#10060; Quitar adjunto</button>
         </div>
+        <input type="file" id="inputSegundaExtra" accept="image/*" capture="environment" style="display:none;">
       </div>
 
       <div class="actions">
@@ -377,19 +379,47 @@ inputArchivo.addEventListener('change', (e)=> manejarArchivoSeleccionado(e.targe
 
 let archivoExtra = null;
 
+// Combina dos imagenes en una sola (una arriba, otra abajo) para casos como recibos de ida/vuelta
+function combinarImagenesVertical(fileA, fileB){
+  return new Promise((resolve)=>{
+    const imgA = new Image(), imgB = new Image();
+    let listos = 0;
+    function alTerminarAmbas(){
+      const ancho = Math.max(imgA.width, imgB.width);
+      const alto = imgA.height + imgB.height;
+      const canvas = document.createElement('canvas');
+      canvas.width = ancho; canvas.height = alto;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,ancho,alto);
+      ctx.drawImage(imgA, 0, 0);
+      ctx.drawImage(imgB, 0, imgA.height);
+      canvas.toBlob((blob)=>{
+        resolve(new File([blob], 'comprobante_combinado.jpg', { type:'image/jpeg' }));
+      }, 'image/jpeg', 0.9);
+    }
+    imgA.onload = ()=>{ listos++; if(listos===2) alTerminarAmbas(); };
+    imgB.onload = ()=>{ listos++; if(listos===2) alTerminarAmbas(); };
+    imgA.src = URL.createObjectURL(fileA);
+    imgB.src = URL.createObjectURL(fileB);
+  });
+}
+
 function manejarArchivoExtraSeleccionado(file){
   if(!file) return;
   archivoExtra = file;
   const previewExtra = document.getElementById('previewExtra');
   const imgPreviewExtra = document.getElementById('imgPreviewExtra');
   const pdfPreviewExtra = document.getElementById('pdfPreviewExtra');
+  const btnAgregarSegunda = document.getElementById('btnAgregarSegundaExtra');
   if(file.type === 'application/pdf'){
     imgPreviewExtra.style.display = 'none';
     pdfPreviewExtra.style.display = 'block';
+    btnAgregarSegunda.style.display = 'none'; // los PDF no se combinan
   } else {
     imgPreviewExtra.style.display = 'block';
     pdfPreviewExtra.style.display = 'none';
     imgPreviewExtra.src = URL.createObjectURL(file);
+    btnAgregarSegunda.style.display = 'block';
   }
   previewExtra.style.display = 'block';
 }
@@ -399,11 +429,30 @@ document.getElementById('btnAbrirArchivosExtra').addEventListener('click', ()=> 
 document.getElementById('inputCamaraExtra').addEventListener('change', (e)=> manejarArchivoExtraSeleccionado(e.target.files[0]));
 document.getElementById('inputArchivoExtra').addEventListener('change', (e)=> manejarArchivoExtraSeleccionado(e.target.files[0]));
 
+document.getElementById('btnAgregarSegundaExtra').addEventListener('click', ()=> document.getElementById('inputSegundaExtra').click());
+document.getElementById('inputSegundaExtra').addEventListener('change', async (e)=>{
+  const segundaFoto = e.target.files[0];
+  if(!segundaFoto || !archivoExtra) return;
+  const btnAgregarSegunda = document.getElementById('btnAgregarSegundaExtra');
+  btnAgregarSegunda.disabled = true; btnAgregarSegunda.textContent = 'Combinando...';
+  try{
+    const combinado = await combinarImagenesVertical(archivoExtra, segundaFoto);
+    archivoExtra = combinado;
+    document.getElementById('imgPreviewExtra').src = URL.createObjectURL(combinado);
+    btnAgregarSegunda.style.display = 'none'; // ya se combino, no se puede agregar una tercera
+  } catch(err){
+    alert('No se pudo combinar las fotos: ' + err.message);
+  }
+  btnAgregarSegunda.disabled = false; btnAgregarSegunda.textContent = '\u2795 Agregar otra foto (ida/vuelta)';
+  e.target.value = '';
+});
+
 document.getElementById('btnQuitarExtra').addEventListener('click', ()=>{
   archivoExtra = null;
   document.getElementById('previewExtra').style.display = 'none';
   document.getElementById('inputCamaraExtra').value = '';
   document.getElementById('inputArchivoExtra').value = '';
+  document.getElementById('inputSegundaExtra').value = '';
 });
 
 document.getElementById('btnDescartar').addEventListener('click', ()=>{
@@ -414,6 +463,7 @@ document.getElementById('btnDescartar').addEventListener('click', ()=>{
   document.getElementById('previewExtra').style.display = 'none';
   document.getElementById('inputCamaraExtra').value = '';
   document.getElementById('inputArchivoExtra').value = '';
+  document.getElementById('inputSegundaExtra').value = '';
   inputCamara.value = '';
   inputArchivo.value = '';
 });
@@ -533,6 +583,7 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
     document.getElementById('previewExtra').style.display = 'none';
     document.getElementById('inputCamaraExtra').value = '';
     document.getElementById('inputArchivoExtra').value = '';
+    document.getElementById('inputSegundaExtra').value = '';
     inputCamara.value = ''; inputArchivo.value = '';
     document.getElementById('firmaNombre').value = '';
   }
