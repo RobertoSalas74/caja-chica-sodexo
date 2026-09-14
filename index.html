@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.35</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.36</div>
     </div>
   </header>
 
@@ -1360,6 +1360,15 @@ function editarRegistro(modo, i){
         <div style="${bC}"><label>Concepto</label><br><input type="text" id="editDescripcion" value="${r.descripcion||''}" style="width:100%; padding:8px; text-transform:uppercase;"></div>
         <div style="${bC}"><label>Origen - Destino</label><br><input type="text" id="editOrigenDestino" value="${r.origenDestino||''}" style="width:100%; padding:8px; text-transform:uppercase;"></div>
         <div style="${bC}"><label>Monto (S/)</label><br><input type="number" id="editMonto" value="${r.total}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}background:var(--accent-soft); border:1px solid var(--accent); border-radius:4px; padding:10px;">
+          <label>${r.evidencia?'Reemplazar':'Adjuntar'} foto del vale firmado</label><br>
+          <input type="file" id="editArchivoVale" accept="image/*,application/pdf" style="margin-top:6px;">
+          ${r.evidencia ? '<div style="font-size:11px; color:var(--ok); margin-top:4px;">Ya tiene una foto adjunta &mdash; elige un archivo aqu\u00ed solo si quieres reemplazarla.</div>' : ''}
+        </div>
+        <div style="${bC}background:#fff; border:1px solid var(--line); border-radius:4px; padding:10px;">
+          <label>${r.evidenciaExtra?'Reemplazar':'Adjuntar'} comprobante adicional (opcional)</label><br>
+          <input type="file" id="editArchivoValeExtra" accept="image/*,application/pdf" style="margin-top:6px;">
+        </div>
         <button id="btnGuardarEdicion" style="width:100%; padding:10px; margin-top:6px;">Guardar cambios</button>
         <div id="editEstado" style="font-size:12px; margin-top:8px; text-align:center;"></div>
       </div>`;
@@ -1398,11 +1407,28 @@ function editarRegistro(modo, i){
         r.total = parseFloat(document.getElementById('editMonto').value)||0;
         r.afecto = Math.min(r.total, AFECTO_LIMITE);
         r.inafecto = Math.max(0, r.total - AFECTO_LIMITE);
+
+        const updatePayload = {
+          fecha: r.fecha, dni: r.dni, solicitante: r.solicitante, motivo: r.descripcion,
+          origen_destino: r.origenDestino, importe: r.total
+        };
+        const archivoVale = document.getElementById('editArchivoVale').files[0];
+        const archivoValeExtra = document.getElementById('editArchivoValeExtra').files[0];
+        if(archivoVale){
+          estado.textContent = 'Subiendo foto del vale...';
+          const nuevaEvidencia = { dataUrl: await new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.onerror=rej; rd.readAsDataURL(archivoVale); }), tipo: archivoVale.type };
+          const url = await subirEvidenciaAStorage(nuevaEvidencia, 'vales');
+          if(url){ r.evidencia = nuevaEvidencia; updatePayload.evidencia_url = url; }
+        }
+        if(archivoValeExtra){
+          estado.textContent = 'Subiendo comprobante adicional...';
+          const nuevaEvidenciaExtra = { dataUrl: await new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.onerror=rej; rd.readAsDataURL(archivoValeExtra); }), tipo: archivoValeExtra.type };
+          const url2 = await subirEvidenciaAStorage(nuevaEvidenciaExtra, 'vales_extra');
+          if(url2){ r.evidenciaExtra = nuevaEvidenciaExtra; updatePayload.evidencia2_url = url2; }
+        }
+        estado.textContent = 'Guardando...';
         if(r.id){
-          const { error } = await supabaseClient.from('vales_movilidad').update({
-            fecha: r.fecha, dni: r.dni, solicitante: r.solicitante, motivo: r.descripcion,
-            origen_destino: r.origenDestino, importe: r.total
-          }).eq('id', r.id);
+          const { error } = await supabaseClient.from('vales_movilidad').update(updatePayload).eq('id', r.id);
           if(error) throw error;
         }
       }
