@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.40</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.41</div>
     </div>
   </header>
 
@@ -1927,7 +1927,12 @@ async function construirWorkbook(incluirIngreso){
       'DESCRIPCION DE SERVICIO','DETALLE DE SERVICIO','UNIDAD','CANTIDAD','PRECIO','SIN IGV','TOTAL',
       'TIPO DE GASTO','CUENTA CONTABLE','Service Category  '];
     const reclAnchos = [19,9,15,14,19,15,37,50,9,13,11,10,8,16,20,19];
-    const reclRowsFacturas = registros.map(r=>[
+    // Los Vale Provisional van primero (justo debajo de las Planillas), luego el resto de facturas
+    const registrosOrdenados = [
+      ...registros.filter(r=>r.tipo==='Vale Provisional'),
+      ...registros.filter(r=>r.tipo!=='Vale Provisional')
+    ];
+    const reclRowsFacturas = registrosOrdenados.map(r=>[
       marca, r.caja, r.site, new Date(r.fecha), r.solicitante, r.documento, r.descripcion, r.detalle, r.unidad,
       r.cantidad, r.precio, Number(r.sinIgv.toFixed(2)), Number(r.total.toFixed(2)), r.tipo, r.cuenta, r.serviceCat
     ]);
@@ -2691,7 +2696,11 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
       <td style="${estiloTD}">${(monto/1.18).toFixed(2)}</td><td style="${estiloTD}">${monto.toFixed(2)}</td><td style="${estiloTD}">${tipo}</td>
       <td style="${estiloTD}"></td><td style="${estiloTD}"></td>
     </tr>`).join('');
-  filas += registros.map(r=>{
+  const registrosOrdenadosPreview = [
+    ...registros.filter(r=>r.tipo==='Vale Provisional'),
+    ...registros.filter(r=>r.tipo!=='Vale Provisional')
+  ];
+  filas += registrosOrdenadosPreview.map(r=>{
     const esProvisional = r.tipo === 'Vale Provisional';
     const estiloFila = esProvisional ? 'background:#fff3cd;' : '';
     return `
