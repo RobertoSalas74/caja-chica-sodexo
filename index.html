@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.36</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.37</div>
     </div>
   </header>
 
@@ -464,6 +464,8 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       <input type="file" id="mArchivoEvidencia" accept="application/pdf,image/*">
       <label for="mArchivoEvidenciaExtra" style="margin-top:10px; margin-bottom:6px;">&#128206; Comprobante adicional (opcional, ej. recibo de taxi/app &mdash; queda por separado)</label>
       <input type="file" id="mArchivoEvidenciaExtra" accept="application/pdf,image/*">
+      <label for="mArchivoEvidenciaExtra2" style="margin-top:10px; margin-bottom:6px; font-size:11px; opacity:.8;">&#10133; Segunda foto del mismo comprobante (ej. ida/vuelta) &mdash; se combinan en un solo archivo</label>
+      <input type="file" id="mArchivoEvidenciaExtra2" accept="image/*">
       <div class="actions" style="margin-top:10px;">
         <button class="secondary" id="btnRecibirCelularMov" style="padding:8px 14px; font-size:11px;">&#128241; Recibir fotos del celular</button>
       </div>
@@ -1226,6 +1228,7 @@ document.getElementById('btnAgregarMovilidad').addEventListener('click', async (
   }
   evidenciaMovilidadActual = null;
   evidenciaMovilidadExtraActual = null;
+  archivoExtraLaptop1 = null;
   renderTabla();
   limpiarFormularioMovilidad();
   guardarEnArchivoConectado();
@@ -2233,17 +2236,69 @@ document.getElementById('mArchivoEvidencia').addEventListener('change', (e)=>{
   e.target.value = '';
 });
 
-document.getElementById('mArchivoEvidenciaExtra').addEventListener('change', (e)=>{
+// Combina dos imagenes en una sola (una arriba, otra abajo) para casos como recibos de ida/vuelta
+function combinarImagenesVertical(fileA, fileB){
+  return new Promise((resolve)=>{
+    const imgA = new Image(), imgB = new Image();
+    let listos = 0;
+    function alTerminarAmbas(){
+      const ancho = Math.max(imgA.width, imgB.width);
+      const alto = imgA.height + imgB.height;
+      const canvas = document.createElement('canvas');
+      canvas.width = ancho; canvas.height = alto;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,ancho,alto);
+      ctx.drawImage(imgA, 0, 0);
+      ctx.drawImage(imgB, 0, imgA.height);
+      canvas.toBlob((blob)=>{
+        resolve(new File([blob], 'comprobante_combinado.jpg', { type:'image/jpeg' }));
+      }, 'image/jpeg', 0.9);
+    }
+    imgA.onload = ()=>{ listos++; if(listos===2) alTerminarAmbas(); };
+    imgB.onload = ()=>{ listos++; if(listos===2) alTerminarAmbas(); };
+    imgA.src = URL.createObjectURL(fileA);
+    imgB.src = URL.createObjectURL(fileB);
+  });
+}
+
+let archivoExtraLaptop1 = null; // guarda el primer archivo del comprobante adicional, para poder combinarlo con el segundo
+
+function leerFileComoEvidencia(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>resolve({ dataUrl: reader.result, tipo: file.type });
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('mArchivoEvidenciaExtra').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   const estado = document.getElementById('mLectorEstado');
   if(!file) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    evidenciaMovilidadExtraActual = { dataUrl: reader.result, tipo: file.type };
-    estado.textContent = 'Comprobante adicional adjuntado (queda por separado del vale).';
-  };
-  reader.onerror = ()=>{ estado.textContent = 'No se pudo leer el archivo, intenta de nuevo.'; };
-  reader.readAsDataURL(file);
+  archivoExtraLaptop1 = file;
+  try{
+    evidenciaMovilidadExtraActual = await leerFileComoEvidencia(file);
+    estado.textContent = 'Comprobante adicional adjuntado (queda por separado del vale). Si es de ida y vuelta, agrega la segunda foto abajo.';
+  } catch(err){ estado.textContent = 'No se pudo leer el archivo, intenta de nuevo.'; }
+  e.target.value = '';
+});
+
+document.getElementById('mArchivoEvidenciaExtra2').addEventListener('change', async (e)=>{
+  const file2 = e.target.files[0];
+  const estado = document.getElementById('mLectorEstado');
+  if(!file2) return;
+  try{
+    if(archivoExtraLaptop1 && archivoExtraLaptop1.type !== 'application/pdf'){
+      estado.textContent = 'Combinando las dos fotos...';
+      const combinado = await combinarImagenesVertical(archivoExtraLaptop1, file2);
+      evidenciaMovilidadExtraActual = await leerFileComoEvidencia(combinado);
+      estado.textContent = 'Las dos fotos se combinaron en un solo comprobante.';
+    } else {
+      evidenciaMovilidadExtraActual = await leerFileComoEvidencia(file2);
+      estado.textContent = 'Comprobante adicional adjuntado (agrega primero la foto principal arriba para poder combinarlas).';
+    }
+  } catch(err){ estado.textContent = 'No se pudo combinar las fotos: ' + err.message; }
   e.target.value = '';
 });
 
