@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '9';
+const APP_VERSION_CAPTURA = '10';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -297,18 +297,21 @@ function manejarArchivoSeleccionado(file){
   if(!file) return;
   if(file.type === 'application/pdf'){
     // Los PDF no pasan por el editor de recorte
-    archivoActual = file;
-    imgPreview.style.display = 'none';
-    pdfPreview.style.display = 'block';
-    preview.style.display = 'block';
-    return;
-  }
-  // Si la libreria de recorte no cargo (red lenta, CDN bloqueado), se usa la foto completa sin recorte
-  if(typeof Cropper === 'undefined'){
     continuarConArchivo(file);
     return;
   }
-  // Imagenes: se abre el editor de recorte primero
+  abrirEditorRecorte(file, continuarConArchivo);
+}
+
+// Editor de recorte generico: abre el editor sobre "file" y llama a onListo(archivoFinal) cuando termina
+// (ya sea recortado o completo). Reutilizable para cualquier foto de la app.
+function abrirEditorRecorte(file, onListo){
+  overlayRecorte._callbackListo = onListo;
+  // Si la libreria de recorte no cargo (red lenta, CDN bloqueado), se usa la foto completa sin recorte
+  if(typeof Cropper === 'undefined'){
+    onListo(file);
+    return;
+  }
   imgParaRecortar.src = URL.createObjectURL(file);
   overlayRecorte.style.display = 'flex';
   if(cropperInstance) cropperInstance.destroy();
@@ -327,7 +330,7 @@ function manejarArchivoSeleccionado(file){
     // Si el editor falla al iniciar, no se deja al usuario atascado: se usa la foto completa
     cropperInstance = null;
     overlayRecorte.style.display = 'none';
-    continuarConArchivo(file);
+    onListo(file);
   }
 }
 
@@ -344,15 +347,17 @@ document.getElementById('btnUsarCompleta').addEventListener('click', (e)=>{
   e.target.disabled = true;
   overlayRecorte.style.display = 'none';
   if(cropperInstance){ try{ cropperInstance.destroy(); }catch(_){} cropperInstance = null; }
-  continuarConArchivo(overlayRecorte._archivoOriginal);
+  const callback = overlayRecorte._callbackListo || continuarConArchivo;
+  callback(overlayRecorte._archivoOriginal);
   e.target.disabled = false;
 });
 
 document.getElementById('btnRecortarContinuar').addEventListener('click', (e)=>{
+  const callback = overlayRecorte._callbackListo || continuarConArchivo;
   if(!cropperInstance){
     // Respaldo: si por alguna razon no hay editor activo, no dejar el boton sin hacer nada
     overlayRecorte.style.display = 'none';
-    continuarConArchivo(overlayRecorte._archivoOriginal);
+    callback(overlayRecorte._archivoOriginal);
     return;
   }
   const btn = e.target;
@@ -370,7 +375,7 @@ document.getElementById('btnRecortarContinuar').addEventListener('click', (e)=>{
     btn.disabled = false;
     document.getElementById('btnUsarCompleta').disabled = false;
     btn.textContent = '\u2702\ufe0f Recortar y continuar';
-    continuarConArchivo(archivoRecortado);
+    callback(archivoRecortado);
   }, overlayRecorte.dataset.archivoOriginalTipo && overlayRecorte.dataset.archivoOriginalTipo.includes('png') ? 'image/png' : 'image/jpeg', 0.92);
 });
 
@@ -404,8 +409,7 @@ function combinarImagenesVertical(fileA, fileB){
   });
 }
 
-function manejarArchivoExtraSeleccionado(file){
-  if(!file) return;
+function mostrarPreviewExtra(file){
   archivoExtra = file;
   const previewExtra = document.getElementById('previewExtra');
   const imgPreviewExtra = document.getElementById('imgPreviewExtra');
@@ -424,19 +428,25 @@ function manejarArchivoExtraSeleccionado(file){
   previewExtra.style.display = 'block';
 }
 
+function manejarArchivoExtraSeleccionado(file){
+  if(!file) return;
+  if(file.type === 'application/pdf'){
+    mostrarPreviewExtra(file);
+    return;
+  }
+  abrirEditorRecorte(file, mostrarPreviewExtra);
+}
+
 document.getElementById('btnAbrirCamaraExtra').addEventListener('click', ()=> document.getElementById('inputCamaraExtra').click());
 document.getElementById('btnAbrirArchivosExtra').addEventListener('click', ()=> document.getElementById('inputArchivoExtra').click());
 document.getElementById('inputCamaraExtra').addEventListener('change', (e)=> manejarArchivoExtraSeleccionado(e.target.files[0]));
 document.getElementById('inputArchivoExtra').addEventListener('change', (e)=> manejarArchivoExtraSeleccionado(e.target.files[0]));
 
-document.getElementById('btnAgregarSegundaExtra').addEventListener('click', ()=> document.getElementById('inputSegundaExtra').click());
-document.getElementById('inputSegundaExtra').addEventListener('change', async (e)=>{
-  const segundaFoto = e.target.files[0];
-  if(!segundaFoto || !archivoExtra) return;
+async function combinarConSegundaFoto(segundaFotoFinal){
   const btnAgregarSegunda = document.getElementById('btnAgregarSegundaExtra');
   btnAgregarSegunda.disabled = true; btnAgregarSegunda.textContent = 'Combinando...';
   try{
-    const combinado = await combinarImagenesVertical(archivoExtra, segundaFoto);
+    const combinado = await combinarImagenesVertical(archivoExtra, segundaFotoFinal);
     archivoExtra = combinado;
     document.getElementById('imgPreviewExtra').src = URL.createObjectURL(combinado);
     btnAgregarSegunda.style.display = 'none'; // ya se combino, no se puede agregar una tercera
@@ -444,7 +454,14 @@ document.getElementById('inputSegundaExtra').addEventListener('change', async (e
     alert('No se pudo combinar las fotos: ' + err.message);
   }
   btnAgregarSegunda.disabled = false; btnAgregarSegunda.textContent = '\u2795 Agregar otra foto (ida/vuelta)';
+}
+
+document.getElementById('btnAgregarSegundaExtra').addEventListener('click', ()=> document.getElementById('inputSegundaExtra').click());
+document.getElementById('inputSegundaExtra').addEventListener('change', async (e)=>{
+  const segundaFoto = e.target.files[0];
+  if(!segundaFoto || !archivoExtra) return;
   e.target.value = '';
+  abrirEditorRecorte(segundaFoto, combinarConSegundaFoto);
 });
 
 document.getElementById('btnQuitarExtra').addEventListener('click', ()=>{
