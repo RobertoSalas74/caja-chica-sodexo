@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.38</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.39</div>
     </div>
   </header>
 
@@ -1466,14 +1466,13 @@ function inicializarVisorZoom(){
     img.style.transform = `translate(${posX}px, ${posY}px) scale(${escala})`;
   }
   function fijarEscala(nueva){
-    escala = Math.min(Math.max(nueva, 1), 6);
-    if(escala===1){ posX=0; posY=0; }
+    escala = Math.min(Math.max(nueva, 0.3), 6);
     aplicarTransform();
   }
 
-  document.getElementById('btnZoomIn').addEventListener('click', ()=> fijarEscala(escala+0.5));
-  document.getElementById('btnZoomOut').addEventListener('click', ()=> fijarEscala(escala-0.5));
-  document.getElementById('btnZoomReset').addEventListener('click', ()=> fijarEscala(1));
+  document.getElementById('btnZoomIn').addEventListener('click', ()=> fijarEscala(escala+0.3));
+  document.getElementById('btnZoomOut').addEventListener('click', ()=> fijarEscala(escala-0.3));
+  document.getElementById('btnZoomReset').addEventListener('click', ()=>{ escala=1; posX=0; posY=0; aplicarTransform(); });
 
   // Doble click/doble tap para alternar zoom rapido
   img.addEventListener('dblclick', ()=> fijarEscala(escala>1 ? 1 : 2.5));
@@ -1484,9 +1483,9 @@ function inicializarVisorZoom(){
     fijarEscala(escala + (e.deltaY<0 ? 0.3 : -0.3));
   }, { passive:false });
 
-  // Arrastrar con el mouse cuando esta ampliado
+  // Arrastrar con el mouse: funciona siempre, ampliado o achicado
   img.addEventListener('mousedown', (e)=>{
-    if(escala<=1) return;
+    e.preventDefault();
     arrastrando = true; inicioX = e.clientX-posX; inicioY = e.clientY-posY;
     wrap.style.cursor = 'grabbing';
   });
@@ -1499,7 +1498,7 @@ function inicializarVisorZoom(){
 
   // Tactil: arrastrar con un dedo, pellizcar con dos para hacer zoom
   img.addEventListener('touchstart', (e)=>{
-    if(e.touches.length===1 && escala>1){
+    if(e.touches.length===1){
       arrastrando = true;
       inicioX = e.touches[0].clientX-posX; inicioY = e.touches[0].clientY-posY;
     } else if(e.touches.length===2){
@@ -1540,7 +1539,7 @@ function verEvidencia(modo, i){
           <button type="button" id="btnZoomReset" style="padding:6px 14px; font-size:12px;">Restablecer</button>
           <button type="button" id="btnZoomIn" style="padding:6px 14px; font-size:16px;">&plus;</button>
         </div>
-        <div id="visorZoomWrap" style="overflow:auto; max-height:75vh; text-align:center; background:#eee; cursor:grab; touch-action:none;">
+        <div id="visorZoomWrap" style="overflow:hidden; max-height:75vh; text-align:center; background:#eee; cursor:grab; touch-action:none;">
           <img id="visorZoomImg" src="${evid.dataUrl}" style="max-width:100%; display:block; margin:0 auto; transform-origin:0 0; transition:transform .1s ease-out; user-select:none;" draggable="false">
         </div>
       </div>`;
