@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.34</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.35</div>
     </div>
   </header>
 
@@ -498,11 +498,11 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
       <div class="span4">
         <label for="mConcepto">Concepto, detalle, descripci&oacute;n</label>
-        <input type="text" id="mConcepto" placeholder="Ej. Traslado por compra de materiales">
+        <input type="text" id="mConcepto" placeholder="Ej. Traslado por compra de materiales" style="text-transform:uppercase;">
       </div>
       <div class="span2">
         <label for="mOrigenDestino">Origen &ndash; Destino</label>
-        <input type="text" id="mOrigenDestino" placeholder="Ej. Planta KC &ndash; Los Olivos">
+        <input type="text" id="mOrigenDestino" placeholder="Ej. Planta KC &ndash; Los Olivos" style="text-transform:uppercase;">
       </div>
       <div class="span2">
         <label for="mMonto">Monto (S/)</label>
@@ -1199,7 +1199,7 @@ document.getElementById('btnAgregarMovilidad').addEventListener('click', async (
   const fecha = get('mFecha'), dni = get('mDni');
   const solicitanteSel = get('mSolicitante');
   const solicitante = solicitanteSel === '__nuevo__' ? get('mSolicitanteNuevo').toUpperCase() : solicitanteSel;
-  const tipo = get('mTipo'), descripcion = get('mConcepto'), origenDestino = get('mOrigenDestino'),
+  const tipo = get('mTipo'), descripcion = get('mConcepto').toUpperCase(), origenDestino = get('mOrigenDestino').toUpperCase(),
         total = parseFloat(get('mMonto'))||0;
 
   if(!fecha || !dni || !solicitante || !tipo || !descripcion || !origenDestino || !total){
@@ -1357,8 +1357,8 @@ function editarRegistro(modo, i){
           <option value="">&mdash; Selecciona &mdash;</option>
           ${nombres.map(n=>`<option ${n===r.solicitante?'selected':''}>${n}</option>`).join('')}
         </select></div>
-        <div style="${bC}"><label>Concepto</label><br><input type="text" id="editDescripcion" value="${r.descripcion||''}" style="width:100%; padding:8px;"></div>
-        <div style="${bC}"><label>Origen - Destino</label><br><input type="text" id="editOrigenDestino" value="${r.origenDestino||''}" style="width:100%; padding:8px;"></div>
+        <div style="${bC}"><label>Concepto</label><br><input type="text" id="editDescripcion" value="${r.descripcion||''}" style="width:100%; padding:8px; text-transform:uppercase;"></div>
+        <div style="${bC}"><label>Origen - Destino</label><br><input type="text" id="editOrigenDestino" value="${r.origenDestino||''}" style="width:100%; padding:8px; text-transform:uppercase;"></div>
         <div style="${bC}"><label>Monto (S/)</label><br><input type="number" id="editMonto" value="${r.total}" style="width:100%; padding:8px;"></div>
         <button id="btnGuardarEdicion" style="width:100%; padding:10px; margin-top:6px;">Guardar cambios</button>
         <div id="editEstado" style="font-size:12px; margin-top:8px; text-align:center;"></div>
@@ -1393,8 +1393,8 @@ function editarRegistro(modo, i){
         r.fecha = document.getElementById('editFecha').value;
         r.dni = document.getElementById('editDni').value;
         r.solicitante = document.getElementById('editSolicitante').value;
-        r.descripcion = document.getElementById('editDescripcion').value;
-        r.origenDestino = document.getElementById('editOrigenDestino').value;
+        r.descripcion = document.getElementById('editDescripcion').value.trim().toUpperCase();
+        r.origenDestino = document.getElementById('editOrigenDestino').value.trim().toUpperCase();
         r.total = parseFloat(document.getElementById('editMonto').value)||0;
         r.afecto = Math.min(r.total, AFECTO_LIMITE);
         r.inafecto = Math.max(0, r.total - AFECTO_LIMITE);
