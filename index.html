@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.46</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.47</div>
     </div>
   </header>
 
@@ -1928,25 +1928,23 @@ async function agregarHojaArqueoAlWorkbook(wb, numCajaActiva, efectivo, comproba
   }
   ws.getCell('I23').value = efectivo.banco || 0;
 
-  // Seccion 2: Comprobantes de pago (filas 28-38 en la plantilla real)
-  comprobantes.slice(0,11).forEach((c,i)=>{
-    const r = 28+i;
-    ws.getCell(`D${r}`).value = new Date(c.fecha);
-    ws.getCell(`E${r}`).value = c.descripcion;
-    ws.getCell(`H${r}`).value = c.documento;
-    ws.getCell(`I${r}`).value = Number(c.total.toFixed(2));
-  });
+  // Seccion 2: Comprobantes de pago (fila 28 en la plantilla real) — solo el TOTAL, sin desglosar cada factura
+  const totalComprobantesArqueo = comprobantes.reduce((s,c)=> s + ((c.tipo==='Vale Provisional' && c.liquidado) ? 0 : c.total), 0);
+  if(comprobantes.length>0){
+    ws.getCell('D28').value = new Date();
+    ws.getCell('E28').value = 'TOTAL COMPROBANTES';
+    ws.getCell('I28').value = Number(totalComprobantesArqueo.toFixed(2));
+  }
 
-  // Seccion 3: Vales provisionales (filas 42-68 en la plantilla real)
-  vales.slice(0,27).forEach((v,i)=>{
-    const r = 42+i;
-    ws.getCell(`D${r}`).value = new Date(v.fecha);
-    ws.getCell(`E${r}`).value = v.solicitante;
-    ws.getCell(`G${r}`).value = v.descripcion;
-    ws.getCell(`I${r}`).value = Number(v.total.toFixed(2));
-  });
+  // Seccion 3: Vales provisionales (fila 42 en la plantilla real) — solo el TOTAL, sin desglosar cada vale
+  const totalValesArqueo = vales.reduce((s,v)=>s+v.total,0);
+  if(vales.length>0){
+    ws.getCell('D42').value = new Date();
+    ws.getCell('E42').value = 'TOTAL VALES';
+    ws.getCell('I42').value = Number(totalValesArqueo.toFixed(2));
+  }
 
-  // Seccion 4: Cajas pendientes de reposicion (filas 73-75 en la plantilla real)
+  // Seccion 4: Cajas pendientes de reposicion (filas 73-75 en la plantilla real) — con detalle completo
   pendientes.slice(0,3).forEach((p,i)=>{
     const r = 73+i;
     ws.getCell(`D${r}`).value = new Date(p.fecha);
@@ -2029,7 +2027,6 @@ async function construirWorkbook(incluirIngreso){
   return wb;
 }
 
-// ── Descarga: Archivo Oficial (Reclasificacion + Movilidad + Arqueo, sin Ingreso) ──
 document.getElementById('btnDescargarOficial').addEventListener('click', async ()=>{
   const totalRegistros = registros.length + registrosMov.length;
   if(totalRegistros===0) return;
