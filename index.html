@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.44</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.45</div>
     </div>
   </header>
 
@@ -809,7 +809,7 @@ let cajasCerradas = [];
 
 btnCerrarCaja.addEventListener('click', async ()=>{
   if(!cajaActiva) return;
-  const totalComprobantes = registros.reduce((s,r)=>s+r.total,0);
+  const totalComprobantes = registros.reduce((s,r)=> s + ((r.tipo==='Vale Provisional' && r.liquidado) ? 0 : r.total), 0);
   const totalVales = registrosMov.reduce((s,r)=>s+r.total,0);
   const montoCierre = totalComprobantes + totalVales;
 
@@ -2905,7 +2905,7 @@ document.getElementById('btnVerMovilidad').addEventListener('click', ()=>{
 
 document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
   const numCaja = cajaActiva || (ultimaCajaCerrada ? parseInt(ultimaCajaCerrada)+1 : '');
-  const totalComprobantes = registros.reduce((s,r)=>s+r.total,0);
+  const totalComprobantes = registros.reduce((s,r)=> s + ((r.tipo==='Vale Provisional' && r.liquidado) ? 0 : r.total), 0);
   const totalVales = registrosMov.reduce((s,r)=>s+r.total,0);
   const totalPendientes = cajasCerradas.reduce((s,c)=>s+c.monto,0);
   const saldoBanco = calcularSaldoActualBanco();
@@ -2923,7 +2923,7 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
   const bHc = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:2px 6px; font-weight:bold; background:#f2f2f2; text-align:center;';
   const bSec = 'font-family:Arial; font-size:11px; font-weight:bold; padding:3px 6px; border:1px solid #000; background:#fff;';
 
-  const filaComprobantes = registros.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bFc}">${r.documento||''}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
+  const filaComprobantes = registros.filter(r=>!(r.tipo==='Vale Provisional' && r.liquidado)).map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bFc}">${r.documento||''}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
   const filaVales = registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">${autorizanteActual}</td></tr>`).join('');
   const filaPendientes = cajasCerradas.map(c=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td><td style="${bFc}"></td></tr>`).join('');
 
