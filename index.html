@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.45</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.46</div>
     </div>
   </header>
 
@@ -826,6 +826,7 @@ btnCerrarCaja.addEventListener('click', async ()=>{
     }
 
     cajasCerradas.push({
+      id: cajaIdActual,
       numero: cajaActiva,
       monto: montoCierre,
       fecha: new Date().toISOString().slice(0,10)
@@ -2617,7 +2618,8 @@ async function restaurarCajaDesdeSupabase(){
     const { data: cerradas, error: errCerradas } = await supabaseClient.from('cajas')
       .select('*').eq('tipo',cajaTipoActiva).eq('estado','cerrada').order('fecha_cierre',{ascending:false});
     if(!errCerradas && cerradas){
-      cajasCerradas = cerradas.map(c=>({ numero: c.numero, monto: parseFloat(c.monto_cierre)||0, fecha: c.fecha_cierre }));
+      // Solo las que aun no han sido reembolsadas aparecen en la Seccion 4 (Pendientes de Reposicion)
+      cajasCerradas = cerradas.filter(c=>!c.reembolsada).map(c=>({ id:c.id, numero: c.numero, monto: parseFloat(c.monto_cierre)||0, fecha: c.fecha_cierre }));
       if(cerradas.length>0) ultimaCajaCerrada = cerradas[0].numero;
     }
 
@@ -2903,6 +2905,36 @@ document.getElementById('btnVerMovilidad').addEventListener('click', ()=>{
   abrirModal('Vista previa — Planilla de Movilidad', html);
 });
 
+// ── Marcar una caja cerrada como reembolsada: sale de "Pendientes de Reposicion" y crea el ingreso en Banco en Vivo ──
+async function marcarCajaReembolsada(i){
+  const c = cajasCerradas[i];
+  if(!c) return;
+  if(!confirm(`\u00bfConfirmas que Sodexo ya te reembols\u00f3 la Caja ${c.numero} por S/ ${c.monto.toFixed(2)}?\n\nSaldr\u00e1 de "Pendientes de Reposici\u00f3n" y se crear\u00e1 un INGRESO por ese monto en el Banco en Vivo de la caja actualmente abierta.`)) return;
+
+  const hoy = new Date().toISOString().slice(0,10);
+  if(c.id){
+    try{
+      await supabaseClient.from('cajas').update({ reembolsada: true, fecha_reembolso: hoy }).eq('id', c.id);
+    } catch(e){ console.warn('No se pudo marcar la caja como reembolsada en Supabase:', e.message); }
+  }
+
+  if(cajaIdActual){
+    const mov = { fecha: hoy, tipo: 'ingreso', descripcion: `Reembolso Sodexo - Caja ${c.numero}`, monto: c.monto, id: null };
+    movimientosBanco.push(mov);
+    try{
+      const { data, error } = await supabaseClient.from('movimientos_banco')
+        .insert({ caja_id: cajaIdActual, fecha: hoy, tipo: 'ingreso', descripcion: mov.descripcion, monto: c.monto }).select('id').single();
+      if(!error && data) mov.id = data.id;
+    } catch(e){ console.warn('No se pudo registrar el ingreso en Banco en Vivo:', e.message); }
+    renderBancoEnVivo();
+  } else {
+    alert('No hay ninguna caja abierta ahora mismo, as\u00ed que no se pudo registrar el ingreso en Banco en Vivo autom\u00e1ticamente. Agr\u00e9galo manualmente cuando abras la pr\u00f3xima caja.');
+  }
+
+  cajasCerradas.splice(i,1);
+  document.getElementById('btnVerArqueo').click(); // refresca la vista del Arqueo con los datos actualizados
+}
+
 document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
   const numCaja = cajaActiva || (ultimaCajaCerrada ? parseInt(ultimaCajaCerrada)+1 : '');
   const totalComprobantes = registros.reduce((s,r)=> s + ((r.tipo==='Vale Provisional' && r.liquidado) ? 0 : r.total), 0);
@@ -2925,7 +2957,7 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
 
   const filaComprobantes = registros.filter(r=>!(r.tipo==='Vale Provisional' && r.liquidado)).map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bFc}">${r.documento||''}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
   const filaVales = registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">${autorizanteActual}</td></tr>`).join('');
-  const filaPendientes = cajasCerradas.map(c=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td><td style="${bFc}"></td></tr>`).join('');
+  const filaPendientes = cajasCerradas.map((c,i)=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td><td style="${bFc}"><button type="button" style="padding:4px 8px; font-size:10px; background:var(--ok); color:#fff; border:none; border-radius:3px; cursor:pointer;" onclick="marcarCajaReembolsada(${i})">&#9989; Reembolsada</button></td></tr>`).join('');
 
   const denominaciones = [200,100,50,20,10];
   const monedas = [5,2,1,0.5,0.2,0.1,0.05,0.01];
@@ -2980,7 +3012,7 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
 
       <div style="${bSec}">4.- CAJAS CHICAS PENDIENTES DE REPOSICION</div>
       <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
-        <tr><td style="${bH}">Fecha</td><td style="${bH}">N&uacute;mero o denominaci&oacute;n</td><td style="${bH}text-align:right;">Importe</td><td style="${bH}">Ubicaci&oacute;n</td></tr>
+        <tr><td style="${bH}">Fecha</td><td style="${bH}">N&uacute;mero o denominaci&oacute;n</td><td style="${bH}text-align:right;">Importe</td><td style="${bH}"></td></tr>
         ${filaPendientes || `<tr><td colspan="4" style="${bFc}">Sin cajas pendientes</td></tr>`}
         <tr><td colspan="2" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalPendientes.toFixed(2)}</td><td style="${bF}"></td></tr>
       </table>
