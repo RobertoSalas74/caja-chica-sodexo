@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.43</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.44</div>
     </div>
   </header>
 
@@ -1145,7 +1145,7 @@ document.getElementById('btnAgregarFactura').addEventListener('click', async ()=
   const registro = {
     caja, site:'SANTA CLARA', fecha, solicitante, documento, descripcion, detalle,
     unidad:'SOLES', cantidad, precio, sinIgv: total/1.18, total, tipo, cuenta, serviceCat,
-    evidencia: evidenciaFacturaActual, id: null
+    evidencia: evidenciaFacturaActual, id: null, liquidado: false, fechaLiquidacion: null
   };
   registros.push(registro);
   if(cajaIdActual){
@@ -1269,14 +1269,14 @@ function renderTabla(){
       return;
     }
     const rowsFactura = registros.map((r,i)=>`
-      <tr>
+      <tr style="${r.tipo==='Vale Provisional' && !r.liquidado ? 'background:#fff3cd;' : ''}">
         <td class="small">${r.fecha}</td>
         <td>${r.solicitante}</td>
         <td class="small">${r.documento||'&mdash;'}</td>
-        <td>${r.descripcion}</td>
+        <td>${r.descripcion}${r.tipo==='Vale Provisional' ? (r.liquidado ? ` <span class="badge" style="background:var(--ok-soft); color:var(--ok);">&#9989; Pagado ${r.fechaLiquidacion||''}</span>` : ` <span class="badge" style="background:#fff3cd; color:#8a6d00;">&#9888;&#65039; Provisional</span>`) : ''}</td>
         <td class="small">${r.cuenta}</td>
         <td class="num">${fmt(r.total)}</td>
-        <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}${(r.tipo==='Gasto Sodexo'||r.tipo==='Refacturable') ? `<button class="del-btn" style="color:#6a4fb0;" onclick="copiarMensajeFactura(${i},this)">&#128203; Copiar</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('factura',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
+        <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}${(r.tipo==='Gasto Sodexo'||r.tipo==='Refacturable') ? `<button class="del-btn" style="color:#6a4fb0;" onclick="copiarMensajeFactura(${i},this)">&#128203; Copiar</button>` : ''}${r.tipo==='Vale Provisional' ? (r.liquidado ? `<button class="del-btn" style="color:#8a6d00;" onclick="desmarcarLiquidado(${i})">Desmarcar pagado</button>` : `<button class="del-btn" style="color:var(--ok);" onclick="marcarLiquidado(${i})">&#128176; Marcar como pagado</button>`) : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('factura',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
       </tr>
     `).join('');
     wrap.innerHTML = `
@@ -1448,7 +1448,53 @@ function editarRegistro(modo, i){
   });
 }
 
-// ── Copiar mensaje de aprobacion (Factura) al portapapeles ──
+// ── Liquidar un Vale Provisional: crea el ingreso en Banco en Vivo (rastro del pago) y lo saca de la Reclasificacion ──
+async function marcarLiquidado(i){
+  const r = registros[i];
+  if(!r || r.tipo!=='Vale Provisional') return;
+  if(!confirm(`\u00bfMarcar como pagado el vale provisional "${r.descripcion}" por S/ ${r.total.toFixed(2)}?\n\nEsto va a crear un INGRESO en Banco en Vivo por ese monto (queda el rastro del pago) y el vale desaparecer\u00e1 de la Reclasificaci\u00f3n.`)) return;
+
+  const hoy = new Date().toISOString().slice(0,10);
+  r.liquidado = true;
+  r.fechaLiquidacion = hoy;
+
+  // 1) Actualizar el comprobante en Supabase
+  if(r.id){
+    try{
+      await supabaseClient.from('comprobantes').update({ liquidado: true, fecha_liquidacion: hoy }).eq('id', r.id);
+    } catch(e){ console.warn('No se pudo marcar como liquidado en Supabase:', e.message); }
+  }
+
+  // 2) Crear el ingreso en Banco en Vivo, con id capturado para poder verlo/eliminarlo despues
+  const mov = { fecha: hoy, tipo: 'ingreso', descripcion: `Pago de vale provisional: ${r.descripcion}`, monto: r.total, id: null };
+  movimientosBanco.push(mov);
+  if(cajaIdActual){
+    try{
+      const { data, error } = await supabaseClient.from('movimientos_banco')
+        .insert({ caja_id: cajaIdActual, fecha: hoy, tipo: 'ingreso', descripcion: mov.descripcion, monto: r.total }).select('id').single();
+      if(!error && data) mov.id = data.id;
+    } catch(e){ console.warn('No se pudo sincronizar el ingreso en Banco en Vivo:', e.message); }
+  }
+
+  renderTabla();
+  renderBancoEnVivo();
+}
+
+async function desmarcarLiquidado(i){
+  const r = registros[i];
+  if(!r || r.tipo!=='Vale Provisional') return;
+  if(!confirm(`\u00bfDesmarcar como pagado? Esto NO borra el ingreso que se cre\u00f3 en Banco en Vivo (si fue un error, b\u00f3rralo manualmente ah\u00ed). El vale volver\u00e1 a aparecer en la Reclasificaci\u00f3n.`)) return;
+  r.liquidado = false;
+  r.fechaLiquidacion = null;
+  if(r.id){
+    try{
+      await supabaseClient.from('comprobantes').update({ liquidado: false, fecha_liquidacion: null }).eq('id', r.id);
+    } catch(e){ console.warn('No se pudo desmarcar en Supabase:', e.message); }
+  }
+  renderTabla();
+}
+
+
 async function copiarAlPortapapeles(texto, btnEl){
   try{
     await navigator.clipboard.writeText(texto);
@@ -1949,10 +1995,12 @@ async function construirWorkbook(incluirIngreso){
       'DESCRIPCION DE SERVICIO','DETALLE DE SERVICIO','UNIDAD','CANTIDAD','PRECIO','SIN IGV','TOTAL',
       'TIPO DE GASTO','CUENTA CONTABLE','Service Category  '];
     const reclAnchos = [19,9,15,14,19,15,37,50,9,13,11,10,8,16,20,19];
-    // Los Vale Provisional van primero (justo debajo de las Planillas), luego el resto de facturas
+    // Los Vale Provisional van primero (justo debajo de las Planillas), luego el resto de facturas.
+    // Los Vale Provisional ya liquidados (pagados) no van en la Reclasificacion.
+    const registrosParaReclasificacion = registros.filter(r=> r.tipo!=='Vale Provisional' || !r.liquidado);
     const registrosOrdenados = [
-      ...registros.filter(r=>r.tipo==='Vale Provisional'),
-      ...registros.filter(r=>r.tipo!=='Vale Provisional')
+      ...registrosParaReclasificacion.filter(r=>r.tipo==='Vale Provisional'),
+      ...registrosParaReclasificacion.filter(r=>r.tipo!=='Vale Provisional')
     ];
     const reclRowsFacturas = registrosOrdenados.map(r=>[
       marca, r.caja, r.site, new Date(r.fecha), r.solicitante, r.documento, r.descripcion, r.detalle, r.unidad,
@@ -2593,7 +2641,8 @@ async function restaurarCajaDesdeSupabase(){
         id: r.id, caja: c.numero, site:'SANTA CLARA', fecha:r.fecha, solicitante:r.solicitante||'', documento:r.documento||'',
         descripcion:r.descripcion, detalle:r.detalle||'', unidad:'SOLES', cantidad:parseFloat(r.cantidad)||1, precio:parseFloat(r.precio)||parseFloat(r.importe),
         sinIgv: parseFloat(r.importe)/1.18, total:parseFloat(r.importe), tipo:r.tipo||'', cuenta:r.cuenta||'', serviceCat:r.service_cat||'',
-        evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null
+        evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null,
+        liquidado: !!r.liquidado, fechaLiquidacion: r.fecha_liquidacion||null
       }));
       if(vales) registrosMov = vales.map(r=>{
         const total = parseFloat(r.importe);
@@ -2718,9 +2767,10 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
       <td style="${estiloTD}">${(monto/1.18).toFixed(2)}</td><td style="${estiloTD}">${monto.toFixed(2)}</td><td style="${estiloTD}">${tipo}</td>
       <td style="${estiloTD}"></td><td style="${estiloTD}"></td>
     </tr>`).join('');
+  const registrosParaReclasificacionPreview = registros.filter(r=> r.tipo!=='Vale Provisional' || !r.liquidado);
   const registrosOrdenadosPreview = [
-    ...registros.filter(r=>r.tipo==='Vale Provisional'),
-    ...registros.filter(r=>r.tipo!=='Vale Provisional')
+    ...registrosParaReclasificacionPreview.filter(r=>r.tipo==='Vale Provisional'),
+    ...registrosParaReclasificacionPreview.filter(r=>r.tipo!=='Vale Provisional')
   ];
   filas += registrosOrdenadosPreview.map(r=>{
     const esProvisional = r.tipo === 'Vale Provisional';
