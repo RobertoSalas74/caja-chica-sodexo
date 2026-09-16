@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.47</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.48</div>
     </div>
   </header>
 
@@ -1369,7 +1369,11 @@ function editarRegistro(modo, i){
         <div style="${bC}background:var(--accent-soft); border:1px solid var(--accent); border-radius:4px; padding:10px;">
           <label>${r.evidencia?'Reemplazar':'Adjuntar'} foto del vale firmado</label><br>
           <input type="file" id="editArchivoVale" accept="image/*,application/pdf" style="margin-top:6px;">
-          ${r.evidencia ? '<div style="font-size:11px; color:var(--ok); margin-top:4px;">Ya tiene una foto adjunta &mdash; elige un archivo aqu\u00ed solo si quieres reemplazarla.</div>' : ''}
+          <div class="actions" style="margin-top:8px;">
+            <button type="button" id="btnRecibirCelularEdit" style="padding:6px 12px; font-size:11px;">&#128241; Recibir del celular</button>
+          </div>
+          <div id="editLectorEstado" style="font-family:var(--mono); font-size:11px; margin-top:6px; color:#6b6255;"></div>
+          ${r.evidencia ? '<div style="font-size:11px; color:var(--ok); margin-top:4px;">Ya tiene una foto adjunta &mdash; elige un archivo o recibe del celular solo si quieres reemplazarla.</div>' : ''}
         </div>
         <div style="${bC}background:#fff; border:1px solid var(--line); border-radius:4px; padding:10px;">
           <label>${r.evidenciaExtra?'Reemplazar':'Adjuntar'} comprobante adicional (opcional)</label><br>
@@ -1380,6 +1384,34 @@ function editarRegistro(modo, i){
       </div>`;
   }
   abrirModal('Editar ' + (modo==='factura' ? 'comprobante' : 'vale de movilidad'), html);
+
+  edicionEvidenciaCelular = null; // se reinicia cada vez que se abre el editor
+  if(modo==='movilidad'){
+    document.getElementById('btnRecibirCelularEdit').addEventListener('click', async ()=>{
+      const estadoLector = document.getElementById('editLectorEstado');
+      estadoLector.textContent = 'Buscando fotos enviadas desde el celular...';
+      try{
+        const { data, error } = await supabaseClient.from('fotos_puente_caja129')
+          .select('*').eq('tipo','voucher_movilidad').eq('caja_tipo',cajaTipoActiva)
+          .order('created_at',{ascending:true}).limit(1);
+        if(error) throw error;
+        if(!data || data.length===0){
+          estadoLector.textContent = 'No hay fotos pendientes del celular. Env\u00eda el "Voucher de Movilidad" desde ah\u00ed primero.';
+          return;
+        }
+        const doc = data[0];
+        edicionEvidenciaCelular = { dataUrl: 'data:' + doc.tipo_archivo + ';base64,' + doc.data_base64, tipo: doc.tipo_archivo };
+        const { error: errorBorrado } = await supabaseClient.from('fotos_puente_caja129').delete().eq('id', doc.id);
+        if(errorBorrado){
+          estadoLector.innerHTML = 'Foto recibida, pero no se pudo borrar del puente. <br>Se usar\u00e1 al presionar "Guardar cambios".';
+        } else {
+          estadoLector.textContent = 'Foto recibida del celular. Se guardar\u00e1 al presionar "Guardar cambios".';
+        }
+      } catch(err){
+        estadoLector.textContent = 'Error al recibir: ' + err.message;
+      }
+    });
+  }
 
   document.getElementById('btnGuardarEdicion').addEventListener('click', async ()=>{
     const estado = document.getElementById('editEstado');
@@ -1425,6 +1457,11 @@ function editarRegistro(modo, i){
           const nuevaEvidencia = { dataUrl: await new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.onerror=rej; rd.readAsDataURL(archivoVale); }), tipo: archivoVale.type };
           const url = await subirEvidenciaAStorage(nuevaEvidencia, 'vales');
           if(url){ r.evidencia = nuevaEvidencia; updatePayload.evidencia_url = url; }
+        } else if(edicionEvidenciaCelular){
+          estado.textContent = 'Subiendo foto recibida del celular...';
+          const url = await subirEvidenciaAStorage(edicionEvidenciaCelular, 'vales');
+          if(url){ r.evidencia = edicionEvidenciaCelular; updatePayload.evidencia_url = url; }
+          edicionEvidenciaCelular = null;
         }
         if(archivoValeExtra){
           estado.textContent = 'Subiendo comprobante adicional...';
@@ -2179,6 +2216,7 @@ async function subirEvidenciaAStorage(evidencia, carpeta){
 let evidenciaFacturaActual = null; // dataURL de la foto/PDF cargado, para "Ver documento" despues
 let evidenciaMovilidadActual = null;
 let evidenciaBancoActual = null;
+let edicionEvidenciaCelular = null; // foto recibida del celular mientras se edita un vale ya existente
 let evidenciaMovilidadExtraActual = null; // comprobante adicional del vale (ej. recibo de taxi/app), queda separado del vale/voucher principal
 
 document.getElementById('bArchivoLector').addEventListener('change', async (e)=>{
