@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.49</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.50</div>
     </div>
   </header>
 
@@ -1846,15 +1846,17 @@ function construirHojaMovilidad(wb, nombre, periodoTexto, filas){
     // La foto que subiste manualmente tiene prioridad sobre la firma guardada
     const datosPersona = (r.fotoManual) ? r.fotoManual : PERSONAS_DATA[r.solicitante];
     let rowHeight = 40;
-    if(datosPersona && datosPersona.firma){
-      const imgId = wb.addImage({ base64: 'data:image/png;base64,' + datosPersona.firma, extension: 'png' });
-      // Se limita a un maximo de ancho y alto (evita filas gigantes con fotos verticales del vale completo)
-      const maxAncho = 170, maxAlto = 95;
-      const escala = Math.min(maxAncho / datosPersona.fw, maxAlto / datosPersona.fh);
-      const anchoDestino = Math.round(datosPersona.fw * escala);
-      const altoDestino = Math.round(datosPersona.fh * escala);
-      rowHeight = Math.max(40, altoDestino * 0.78 + 6);
-      ws.addImage(imgId, { tl: { col: 7.05, row: row-1+0.05 }, ext: { width: anchoDestino, height: altoDestino } });
+    if(datosPersona && datosPersona.firma && datosPersona.fw > 0 && datosPersona.fh > 0){
+      try{
+        const imgId = wb.addImage({ base64: 'data:image/png;base64,' + datosPersona.firma, extension: 'png' });
+        // Se limita a un maximo de ancho y alto (evita filas gigantes con fotos verticales del vale completo)
+        const maxAncho = 170, maxAlto = 95;
+        const escala = Math.min(maxAncho / datosPersona.fw, maxAlto / datosPersona.fh);
+        const anchoDestino = Math.max(1, Math.round(datosPersona.fw * escala));
+        const altoDestino = Math.max(1, Math.round(datosPersona.fh * escala));
+        rowHeight = Math.max(40, altoDestino * 0.78 + 6);
+        ws.addImage(imgId, { tl: { col: 7.05, row: row-1+0.05 }, ext: { width: anchoDestino, height: altoDestino } });
+      } catch(e){ console.warn('No se pudo insertar la firma de', r.solicitante, ':', e.message); }
     }
     ws.getRow(row).height = rowHeight;
 
@@ -1970,18 +1972,14 @@ async function agregarHojaArqueoAlWorkbook(wb, numCajaActiva, efectivo, comproba
   // Seccion 2: Comprobantes de pago (fila 28 en la plantilla real) — solo el TOTAL, sin desglosar cada factura
   const totalComprobantesArqueo = comprobantes.reduce((s,c)=> s + ((c.tipo==='Vale Provisional' && c.liquidado) ? 0 : c.total), 0);
   ws.getCell('I28').value = Number(totalComprobantesArqueo.toFixed(2));
-  // Limpiar las filas 29-38 (quedaron vacias en la plantilla, se ocultan para que no se vea el recuadro sin usar)
-  for(let f=29; f<=38; f++){
-    ['D','E','F','G','H','I'].forEach(c=>{ ws.getCell(`${c}${f}`).value = null; ws.getCell(`${c}${f}`).border = {}; });
-  }
+  // Colapsar las filas 29-38 (no se usan) sin tocar bordes ni contenido de la plantilla
+  for(let f=29; f<=38; f++){ ws.getRow(f).height = 1; }
 
   // Seccion 3: Vales provisionales (fila 42 en la plantilla real) — solo el TOTAL, sin desglosar cada vale
   const totalValesArqueo = vales.reduce((s,v)=>s+v.total,0);
   ws.getCell('I42').value = Number(totalValesArqueo.toFixed(2));
-  // Limpiar las filas 43-68 (quedaron vacias en la plantilla, se ocultan para que no se vea el recuadro sin usar)
-  for(let f=43; f<=68; f++){
-    ['D','E','F','G','H','I'].forEach(c=>{ ws.getCell(`${c}${f}`).value = null; ws.getCell(`${c}${f}`).border = {}; });
-  }
+  // Colapsar las filas 43-68 (no se usan) sin tocar bordes ni contenido de la plantilla
+  for(let f=43; f<=68; f++){ ws.getRow(f).height = 1; }
 
   // Seccion 4: Cajas pendientes de reposicion (filas 73-75 en la plantilla real) — con detalle completo
   pendientes.slice(0,3).forEach((p,i)=>{
