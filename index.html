@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.50</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.51</div>
     </div>
   </header>
 
@@ -550,7 +550,10 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     <div style="background:#fff; max-width:1100px; margin:0 auto; border-radius:6px; overflow:hidden;">
       <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:var(--ink); color:#fff;">
         <span id="modalTitulo" style="font-family:var(--mono); font-size:13px; text-transform:uppercase; letter-spacing:.05em;">Vista previa</span>
-        <button id="btnCerrarModal" style="background:none; border:1px solid #fff; color:#fff; padding:4px 12px; border-radius:3px; cursor:pointer; font-family:var(--mono); font-size:11px;">Cerrar &times;</button>
+        <div style="display:flex; gap:8px;">
+          <button id="btnImprimirModal" style="background:none; border:1px solid #fff; color:#fff; padding:4px 12px; border-radius:3px; cursor:pointer; font-family:var(--mono); font-size:11px;">&#128424; Imprimir</button>
+          <button id="btnCerrarModal" style="background:none; border:1px solid #fff; color:#fff; padding:4px 12px; border-radius:3px; cursor:pointer; font-family:var(--mono); font-size:11px;">Cerrar &times;</button>
+        </div>
       </div>
       <div id="modalContenido" style="padding:0; overflow-x:auto;"></div>
     </div>
@@ -2727,6 +2730,7 @@ function abrirModal(titulo, html){
   modalVistaPrevia.style.display = 'block';
 }
 document.getElementById('btnCerrarModal').addEventListener('click', ()=> modalVistaPrevia.style.display='none');
+document.getElementById('btnImprimirModal').addEventListener('click', ()=> window.print());
 modalVistaPrevia.addEventListener('click', (e)=>{ if(e.target===modalVistaPrevia) modalVistaPrevia.style.display='none'; });
 
 // ── Imprimir el historial de Banco en Vivo (solo movimientos, para verificacion fisica) ──
