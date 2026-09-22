@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.53</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.54</div>
     </div>
   </header>
 
@@ -1897,20 +1897,19 @@ function construirHojaMovilidad(wb, nombre, periodoTexto, filas){
     // Insertar la FOTO COMPLETA del vale (Recibido por / Nombre / DNI), igual al archivo real
     // La foto que subiste manualmente tiene prioridad sobre la firma guardada
     const datosPersona = (r.fotoManual) ? r.fotoManual : PERSONAS_DATA[r.solicitante];
-    let rowHeight = 40;
+    ws.getRow(row).height = 84; // altura fija, igual a la Planilla de Movilidad original de Sodexo
     if(datosPersona && datosPersona.firma && datosPersona.fw > 0 && datosPersona.fh > 0){
       try{
         const imgId = wb.addImage({ base64: 'data:image/png;base64,' + datosPersona.firma, extension: 'png' });
-        // Se limita a un maximo de ancho y alto (evita filas gigantes con fotos verticales del vale completo)
-        const maxAncho = 170, maxAlto = 95;
-        const escala = Math.min(maxAncho / datosPersona.fw, maxAlto / datosPersona.fh);
+        // Se escala solo por el alto de la fila (84pt); el ancho sigue la proporcion real de la foto,
+        // igual que en el archivo original (las fotos pueden ser mas anchas que la columna H)
+        const maxAlto = 108, maxAncho = 400;
+        const escala = Math.min(maxAlto / datosPersona.fh, maxAncho / datosPersona.fw);
         const anchoDestino = Math.max(1, Math.round(datosPersona.fw * escala));
         const altoDestino = Math.max(1, Math.round(datosPersona.fh * escala));
-        rowHeight = Math.max(40, altoDestino * 0.78 + 6);
         ws.addImage(imgId, { tl: { col: 7.05, row: row-1+0.05 }, ext: { width: anchoDestino, height: altoDestino } });
       } catch(e){ console.warn('No se pudo insertar la firma de', r.solicitante, ':', e.message); }
     }
-    ws.getRow(row).height = rowHeight;
 
     for(let col=3; col<=11; col++){
       ws.getCell(row, col).font = { name:'Arial', size:10 };
