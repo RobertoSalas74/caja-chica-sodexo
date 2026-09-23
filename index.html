@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.56</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.57</div>
     </div>
   </header>
 
@@ -1901,20 +1901,20 @@ function construirHojaMovilidad(wb, nombre, periodoTexto, filas){
     if(datosPersona && datosPersona.firma && datosPersona.fw > 0 && datosPersona.fh > 0){
       try{
         const imgId = wb.addImage({ base64: 'data:image/png;base64,' + datosPersona.firma, extension: 'png' });
-        // Tamano real de la celda H (columna ~220px, fila 84pt ~112px), con margen
-        const celdaAnchoPx = 220, celdaAltoPx = 106, margen = 4, rowPx = 112;
-        const escala = Math.min((celdaAnchoPx-2*margen) / datosPersona.fw, (celdaAltoPx-2*margen) / datosPersona.fh);
-        const anchoDestino = Math.max(1, Math.round(datosPersona.fw * escala));
-        const altoDestino = Math.max(1, Math.round(datosPersona.fh * escala));
-        // Centrada dentro de la celda, en unidades fraccionarias de columna/fila
-        const offXfrac = Math.max(0, (celdaAnchoPx - anchoDestino)/2) / celdaAnchoPx;
-        const offYfrac = Math.max(0, (celdaAltoPx - altoDestino)/2) / rowPx;
-        const tlCol = 7 + offXfrac, tlRow = (row-1) + offYfrac;
-        // twoCellAnchor (esquina inicial Y final): mismo tipo de anclaje que usa el archivo original de Sodexo,
-        // mas confiable en Excel real que oneCellAnchor+ext (que en algunas versiones de Excel no respeta el tamano)
+        const EMU_POR_PX = 9525;
+        // Tamano real de la celda H en pixeles: columna 31.63 unidades Excel (~226px), fila 84pt (~112px)
+        const celdaAnchoPx = 226, celdaAltoPx = 112, margenPx = 4;
+        const escala = Math.min((celdaAnchoPx-2*margenPx) / datosPersona.fw, (celdaAltoPx-2*margenPx) / datosPersona.fh);
+        const anchoPx = Math.max(1, Math.round(datosPersona.fw * escala));
+        const altoPx = Math.max(1, Math.round(datosPersona.fh * escala));
+        const offXpx = Math.max(0, Math.round((celdaAnchoPx - anchoPx)/2));
+        const offYpx = Math.max(0, Math.round((celdaAltoPx - altoPx)/2));
+        const filaIdx = row - 1; // 0-indexado
+        // Coordenadas EMU calculadas directamente (evita el conversor de puntos/columna de ExcelJS, que
+        // usa un factor de unidades distinto al real y descuadraba las fotos en Excel).
         ws.addImage(imgId, {
-          tl: { col: tlCol, row: tlRow },
-          br: { col: tlCol + anchoDestino/celdaAnchoPx, row: tlRow + altoDestino/rowPx },
+          tl: { nativeCol: 7, nativeColOff: offXpx*EMU_POR_PX, nativeRow: filaIdx, nativeRowOff: offYpx*EMU_POR_PX },
+          br: { nativeCol: 7, nativeColOff: (offXpx+anchoPx)*EMU_POR_PX, nativeRow: filaIdx, nativeRowOff: (offYpx+altoPx)*EMU_POR_PX },
           editAs: 'oneCell'
         });
       } catch(e){ console.warn('No se pudo insertar la firma de', r.solicitante, ':', e.message); }
