@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.57</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.58</div>
     </div>
   </header>
 
@@ -347,6 +347,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <select id="bancoMovTipo">
           <option value="egreso">Egreso (sale)</option>
           <option value="ingreso">Ingreso (entra)</option>
+          <option value="saldo_inicial">Saldo Inicial (de esta caja)</option>
         </select>
       </div>
       <div class="span2">
@@ -1077,8 +1078,29 @@ document.getElementById('btnEstablecerSaldoInicial').addEventListener('click', a
 document.getElementById('btnAgregarMovimientoBanco').addEventListener('click', async ()=>{
   const fecha = document.getElementById('bancoMovFecha').value;
   const tipo = document.getElementById('bancoMovTipo').value;
-  const descripcion = document.getElementById('bancoMovDescripcion').value.trim();
   const monto = parseFloat(document.getElementById('bancoMovMonto').value)||0;
+
+  if(tipo === 'saldo_inicial'){
+    if(!monto) return;
+    saldoInicialBanco = monto;
+    if(cajaIdActual){
+      try{
+        const updatePayload = { saldo_inicial_banco: saldoInicialBanco };
+        if(evidenciaBancoActual){
+          const url = await subirEvidenciaAStorage(evidenciaBancoActual, 'saldo_banco');
+          if(url){ updatePayload.foto_saldo_url = url; fotoSaldoBanco = { dataUrl: url }; actualizarEstadoFotoSaldo(); }
+        }
+        await supabaseClient.from('cajas').update(updatePayload).eq('id', cajaIdActual);
+      } catch(e){ console.warn('No se pudo guardar el saldo inicial con foto:', e.message); }
+    }
+    evidenciaBancoActual = null;
+    document.getElementById('bancoMovDescripcion').value='';
+    document.getElementById('bancoMovMonto').value='';
+    renderBancoEnVivo();
+    return;
+  }
+
+  const descripcion = document.getElementById('bancoMovDescripcion').value.trim();
   if(!fecha || !descripcion || !monto) return;
   const mov = {fecha, tipo, descripcion, monto, id: null, evidencia: evidenciaBancoActual};
   movimientosBanco.push(mov);
