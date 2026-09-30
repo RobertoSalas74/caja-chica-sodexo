@@ -192,7 +192,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.58</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.59</div>
     </div>
   </header>
 
@@ -1087,8 +1087,9 @@ document.getElementById('btnAgregarMovimientoBanco').addEventListener('click', a
       try{
         const updatePayload = { saldo_inicial_banco: saldoInicialBanco };
         if(evidenciaBancoActual){
-          const url = await subirEvidenciaAStorage(evidenciaBancoActual, 'saldo_banco');
-          if(url){ updatePayload.foto_saldo_url = url; fotoSaldoBanco = { dataUrl: url }; actualizarEstadoFotoSaldo(); }
+          // Foto del saldo INICIAL: se guarda aparte, no reemplaza la foto del saldo real que usa el Arqueo
+          const url = await subirEvidenciaAStorage(evidenciaBancoActual, 'saldo_inicial');
+          if(url) updatePayload.foto_saldo_inicial_url = url;
         }
         await supabaseClient.from('cajas').update(updatePayload).eq('id', cajaIdActual);
       } catch(e){ console.warn('No se pudo guardar el saldo inicial con foto:', e.message); }
