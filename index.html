@@ -191,8 +191,9 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       <div class="actions" style="margin-top:0; gap:6px;">
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
+        <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.59</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.60</div>
     </div>
   </header>
 
@@ -1729,6 +1730,136 @@ function verEvidencia(modo, i){
   abrirModal((esExtra ? 'Comprobante adicional — ' : 'Documento adjunto — ') + (r.descripcion||r.solicitante||''), html);
   if(!esPdf) inicializarVisorZoom();
 }
+
+// ── Historial de cajas cerradas (solo lectura): facturas, vales y banco de cada caja, con sus evidencias ──
+let historialCajaId = null;
+let historialDetalle = { comp:[], vales:[], banco:[] };
+function hEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function hEsPdf(u){ return /\.pdf(\?|$)/i.test(u||'') || (u||'').indexOf('data:application/pdf')===0; }
+function hMonto(n){ return 'S/ ' + (parseFloat(n)||0).toFixed(2); }
+const H_TH = 'text-align:left; padding:6px 8px; background:#f2f2f2; border:1px solid #ccc; font-family:Arial; font-size:11px;';
+const H_TD = 'padding:5px 8px; border:1px solid #ddd; font-family:Arial; font-size:12px; vertical-align:top;';
+const H_BTN = 'padding:3px 8px; font-size:11px; margin-right:4px; cursor:pointer;';
+
+async function abrirHistorialCajas(){
+  historialCajaId = null;
+  abrirModal('Historial de cajas cerradas', '<div style="padding:20px; font-family:Arial;">Cargando...</div>');
+  const { data, error } = await supabaseClient.from('cajas')
+    .select('id,numero,tipo,fecha_apertura,fecha_cierre,monto_cierre,reembolsada')
+    .eq('estado','cerrada').order('fecha_cierre',{ascending:false});
+  if(error){ modalContenido.innerHTML = '<div style="padding:20px; font-family:Arial; color:#c00;">No se pudo cargar el historial: '+hEsc(error.message)+'</div>'; return; }
+  if(!data || data.length===0){ modalContenido.innerHTML = '<div style="padding:20px; font-family:Arial;">A\u00fan no hay cajas cerradas.</div>'; return; }
+  const filas = data.map(c=>`<tr>
+    <td style="${H_TD}">${c.tipo==='foods'?'FOODS':'MANTENIMIENTO'}</td>
+    <td style="${H_TD}"><b>CAJA ${hEsc(c.numero)}</b></td>
+    <td style="${H_TD}">${hEsc(c.fecha_apertura||'')}</td>
+    <td style="${H_TD}">${hEsc(c.fecha_cierre||'')}</td>
+    <td style="${H_TD} text-align:right;">${hMonto(c.monto_cierre)}</td>
+    <td style="${H_TD}">${c.reembolsada?'Reembolsada':'Pendiente de reembolso'}</td>
+    <td style="${H_TD}"><button type="button" style="${H_BTN}" onclick="verDetalleCajaCerrada('${c.id}')">&#128194; Abrir</button></td>
+  </tr>`).join('');
+  modalContenido.innerHTML = `<div style="padding:16px 20px;">
+    <table style="border-collapse:collapse; width:100%;"><thead><tr>
+      <th style="${H_TH}">Tipo</th><th style="${H_TH}">Caja</th><th style="${H_TH}">Apertura</th><th style="${H_TH}">Cierre</th>
+      <th style="${H_TH} text-align:right;">Monto de cierre</th><th style="${H_TH}">Estado</th><th style="${H_TH}"></th>
+    </tr></thead><tbody>${filas}</tbody></table></div>`;
+}
+
+function filtrarHistorial(){
+  const q = (document.getElementById('histBuscar').value||'').toLowerCase();
+  document.querySelectorAll('#modalContenido .hist-row').forEach(tr=>{
+    tr.style.display = tr.textContent.toLowerCase().indexOf(q)>=0 ? '' : 'none';
+  });
+}
+
+async function verDetalleCajaCerrada(id){
+  historialCajaId = id;
+  abrirModal('Detalle de caja cerrada', '<div style="padding:20px; font-family:Arial;">Cargando...</div>');
+  const [rc, rcomp, rvales, rbanco] = await Promise.all([
+    supabaseClient.from('cajas').select('*').eq('id',id).single(),
+    supabaseClient.from('comprobantes').select('*').eq('caja_id',id).order('fecha',{ascending:true}),
+    supabaseClient.from('vales_movilidad').select('*').eq('caja_id',id).order('fecha',{ascending:true}),
+    supabaseClient.from('movimientos_banco').select('*').eq('caja_id',id).order('fecha',{ascending:true}),
+  ]);
+  const err = rc.error || rcomp.error || rvales.error || rbanco.error;
+  if(err){ modalContenido.innerHTML = '<div style="padding:20px; font-family:Arial; color:#c00;">No se pudo cargar la caja: '+hEsc(err.message)+'</div>'; return; }
+  const c = rc.data;
+  historialDetalle = { comp: rcomp.data||[], vales: rvales.data||[], banco: rbanco.data||[] };
+  const { comp, vales, banco } = historialDetalle;
+
+  const totalComp = comp.reduce((s,r)=>s+(parseFloat(r.importe)||0),0);
+  const totalVales = vales.reduce((s,r)=>s+(parseFloat(r.importe)||0),0);
+  modalTitulo.textContent = (c.tipo==='foods'?'FOODS':'MANTENIMIENTO') + ' \u2014 CAJA ' + c.numero + ' (cerrada)';
+
+  const filasComp = comp.map((r,i)=>`<tr class="hist-row">
+    <td style="${H_TD}">${hEsc(r.fecha)}</td><td style="${H_TD}">${hEsc(r.documento||'')}</td><td style="${H_TD}">${hEsc(r.solicitante||'')}</td>
+    <td style="${H_TD}">${hEsc(r.descripcion||'')}</td><td style="${H_TD}">${hEsc(r.tipo||'')}</td>
+    <td style="${H_TD} text-align:right;">${hMonto(r.importe)}</td>
+    <td style="${H_TD}">${r.evidencia_url ? `<button type="button" style="${H_BTN}" onclick="verEvidenciaHistorial('comp',${i},1)">&#128065; Ver factura</button>` : '<span style="color:#999;">sin foto</span>'}</td>
+  </tr>`).join('') || `<tr><td colspan="7" style="${H_TD} text-align:center;">Sin facturas</td></tr>`;
+
+  const filasVales = vales.map((r,i)=>`<tr class="hist-row">
+    <td style="${H_TD}">${hEsc(r.fecha)}</td><td style="${H_TD}">${hEsc(r.solicitante||'')}</td><td style="${H_TD}">${hEsc(r.dni||'')}</td>
+    <td style="${H_TD}">${hEsc(r.motivo||'')}</td><td style="${H_TD}">${hEsc(r.origen_destino||'')}</td>
+    <td style="${H_TD} text-align:right;">${hMonto(r.importe)}</td>
+    <td style="${H_TD}">${r.evidencia_url ? `<button type="button" style="${H_BTN}" onclick="verEvidenciaHistorial('vales',${i},1)">&#128065; Vale</button>` : ''}${r.evidencia2_url ? `<button type="button" style="${H_BTN}" onclick="verEvidenciaHistorial('vales',${i},2)">&#128065; Comprobante</button>` : ''}${(!r.evidencia_url && !r.evidencia2_url) ? '<span style="color:#999;">sin foto</span>' : ''}</td>
+  </tr>`).join('') || `<tr><td colspan="7" style="${H_TD} text-align:center;">Sin vales</td></tr>`;
+
+  const filasBanco = banco.map((r,i)=>`<tr class="hist-row">
+    <td style="${H_TD}">${hEsc(r.fecha)}</td><td style="${H_TD}">${hEsc(r.tipo||'')}</td><td style="${H_TD}">${hEsc(r.descripcion||'')}</td>
+    <td style="${H_TD} text-align:right;">${hMonto(r.monto)}</td>
+    <td style="${H_TD}">${r.evidencia_url ? `<button type="button" style="${H_BTN}" onclick="verEvidenciaHistorial('banco',${i},1)">&#128065; Ver</button>` : ''}</td>
+  </tr>`).join('') || `<tr><td colspan="5" style="${H_TD} text-align:center;">Sin movimientos</td></tr>`;
+
+  const titulo = (t)=>`<h3 style="font-family:Arial; font-size:13px; margin:18px 0 6px; color:#4b0082;">${t}</h3>`;
+  modalContenido.innerHTML = `<div style="padding:16px 20px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+      <button type="button" style="${H_BTN}" onclick="abrirHistorialCajas()">&larr; Volver al historial</button>
+      <input type="text" id="histBuscar" oninput="filtrarHistorial()" placeholder="Buscar (n\u00famero de factura, nombre, descripci\u00f3n...)" style="flex:1; min-width:220px; padding:6px 8px; font-size:12px;">
+    </div>
+    <div style="font-family:Arial; font-size:12px; margin-bottom:4px;">
+      Fondo fijo: <b>${hMonto(c.fondo_fijo)}</b> &nbsp;|&nbsp; Saldo inicial banco: <b>${hMonto(c.saldo_inicial_banco)}</b> &nbsp;|&nbsp;
+      Facturas: <b>${hMonto(totalComp)}</b> &nbsp;|&nbsp; Vales: <b>${hMonto(totalVales)}</b> &nbsp;|&nbsp; Monto de cierre: <b>${hMonto(c.monto_cierre)}</b> &nbsp;|&nbsp;
+      Cierre: <b>${hEsc(c.fecha_cierre||'')}</b> &nbsp;|&nbsp; ${c.reembolsada?'Reembolsada':'Pendiente de reembolso'}
+    </div>
+    ${titulo('FACTURAS / COMPROBANTES ('+comp.length+')')}
+    <table style="border-collapse:collapse; width:100%;"><thead><tr>
+      <th style="${H_TH}">Fecha</th><th style="${H_TH}">N\u00b0 Documento</th><th style="${H_TH}">Solicitante</th><th style="${H_TH}">Descripci\u00f3n</th><th style="${H_TH}">Tipo</th><th style="${H_TH} text-align:right;">Importe</th><th style="${H_TH}"></th>
+    </tr></thead><tbody>${filasComp}</tbody></table>
+    ${titulo('VALES DE MOVILIDAD ('+vales.length+')')}
+    <table style="border-collapse:collapse; width:100%;"><thead><tr>
+      <th style="${H_TH}">Fecha</th><th style="${H_TH}">Solicitante</th><th style="${H_TH}">DNI</th><th style="${H_TH}">Motivo</th><th style="${H_TH}">Origen - Destino</th><th style="${H_TH} text-align:right;">Importe</th><th style="${H_TH}"></th>
+    </tr></thead><tbody>${filasVales}</tbody></table>
+    ${titulo('BANCO ('+banco.length+')')}
+    <table style="border-collapse:collapse; width:100%;"><thead><tr>
+      <th style="${H_TH}">Fecha</th><th style="${H_TH}">Tipo</th><th style="${H_TH}">Descripci\u00f3n</th><th style="${H_TH} text-align:right;">Monto</th><th style="${H_TH}"></th>
+    </tr></thead><tbody>${filasBanco}</tbody></table>
+  </div>`;
+}
+
+function verEvidenciaHistorial(tabla, i, cual){
+  const r = (historialDetalle[tabla]||[])[i];
+  if(!r) return;
+  const url = cual===2 ? r.evidencia2_url : r.evidencia_url;
+  if(!url) return;
+  const volver = `<div style="padding:8px 12px; background:#fff; border-bottom:1px solid #ddd;"><button type="button" style="${H_BTN}" onclick="verDetalleCajaCerrada('${historialCajaId}')">&larr; Volver a la caja</button> <a href="${hEsc(url)}" target="_blank" rel="noopener" style="font-family:Arial; font-size:11px; margin-left:8px;">Abrir en pesta\u00f1a nueva</a></div>`;
+  const visor = hEsPdf(url)
+    ? `<iframe src="${hEsc(url)}" style="width:100%; height:75vh; border:none;"></iframe>`
+    : `<div style="position:relative;">
+        <div id="visorZoomActions" style="position:sticky; top:0; z-index:5; display:flex; gap:6px; justify-content:center; padding:8px; background:#fff; border-bottom:1px solid var(--line);">
+          <button type="button" id="btnZoomOut" style="padding:6px 14px; font-size:16px;">&minus;</button>
+          <button type="button" id="btnZoomReset" style="padding:6px 14px; font-size:12px;">Restablecer</button>
+          <button type="button" id="btnZoomIn" style="padding:6px 14px; font-size:16px;">&plus;</button>
+        </div>
+        <div id="visorZoomWrap" style="overflow:hidden; max-height:75vh; text-align:center; background:#eee; cursor:grab; touch-action:none;">
+          <img id="visorZoomImg" src="${hEsc(url)}" style="max-width:100%; display:block; margin:0 auto; transform-origin:0 0; transition:transform .1s ease-out; user-select:none;" draggable="false">
+        </div>
+      </div>`;
+  modalContenido.innerHTML = volver + visor;
+  if(!hEsPdf(url)) inicializarVisorZoom();
+}
+
+document.getElementById('btnHistorialCajas').addEventListener('click', abrirHistorialCajas);
 
 document.getElementById('btnVaciar').addEventListener('click', ()=>{
   if(confirm('\u00bfSeguro que quieres borrar todos los registros de esta sesi\u00f3n?')){
