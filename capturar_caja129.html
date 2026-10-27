@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '13';
+const APP_VERSION_CAPTURA = '14';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -314,6 +314,10 @@ function detectarRecorteAuto(data, w, h){
   const L = new Uint8Array(n);
   for(let i=0,p=0;i<n;i++,p+=4) L[i] = (data[p]*299 + data[p+1]*587 + data[p+2]*114)/1000;
 
+  // Saturacion de color: el papel (blanco/gris) casi no tiene; la madera o un fondo de color si
+  const S = new Uint8Array(n);
+  for(let i=0,p=0;i<n;i++,p+=4){ const mx=Math.max(data[p],data[p+1],data[p+2]), mn=Math.min(data[p],data[p+1],data[p+2]); S[i] = mx ? ((mx-mn)*100/mx) : 0; }
+
   // 1) Umbral de Otsu para separar papel (claro) de fondo (escritorio, teclado)
   const hist = new Array(256).fill(0);
   for(let i=0;i<n;i++) hist[L[i]]++;
@@ -328,23 +332,31 @@ function detectarRecorteAuto(data, w, h){
     if(varEntre > mejor){ mejor = varEntre; T = t; }
   }
 
-  // 2) Componente claro mas grande (relleno por pila, vecindad 4)
+  // 2) Componente claro mas grande (relleno por pila, vecindad 4).
+  //    Primero se busca papel "claro y sin color"; si no aparece ninguno grande, se usa solo el brillo (como antes)
   const etiqueta = new Int32Array(n);
   const pila = new Int32Array(n);
-  let mejorId = 0, mejorArea = 0, id = 0;
-  for(let s=0;s<n;s++){
-    if(L[s] <= T || etiqueta[s]) continue;
-    id++; let sp=0, area=0; pila[sp++] = s; etiqueta[s] = id;
-    while(sp){
-      const p = pila[--sp]; area++;
-      const x = p % w, y = (p - x)/w;
-      if(x>0   && !etiqueta[p-1] && L[p-1]>T){ etiqueta[p-1]=id; pila[sp++]=p-1; }
-      if(x<w-1 && !etiqueta[p+1] && L[p+1]>T){ etiqueta[p+1]=id; pila[sp++]=p+1; }
-      if(y>0   && !etiqueta[p-w] && L[p-w]>T){ etiqueta[p-w]=id; pila[sp++]=p-w; }
-      if(y<h-1 && !etiqueta[p+w] && L[p+w]>T){ etiqueta[p+w]=id; pila[sp++]=p+w; }
+  let mejorId = 0, mejorArea = 0;
+  function buscarPapel(satMax){
+    etiqueta.fill(0); let id = 0, mId = 0, mArea = 0;
+    const apto = (p)=> L[p] > T && (satMax >= 100 || S[p] < satMax);
+    for(let s0=0;s0<n;s0++){
+      if(!apto(s0) || etiqueta[s0]) continue;
+      id++; let sp=0, area=0; pila[sp++] = s0; etiqueta[s0] = id;
+      while(sp){
+        const p = pila[--sp]; area++;
+        const x = p % w, y = (p - x)/w;
+        if(x>0   && !etiqueta[p-1] && apto(p-1)){ etiqueta[p-1]=id; pila[sp++]=p-1; }
+        if(x<w-1 && !etiqueta[p+1] && apto(p+1)){ etiqueta[p+1]=id; pila[sp++]=p+1; }
+        if(y>0   && !etiqueta[p-w] && apto(p-w)){ etiqueta[p-w]=id; pila[sp++]=p-w; }
+        if(y<h-1 && !etiqueta[p+w] && apto(p+w)){ etiqueta[p+w]=id; pila[sp++]=p+w; }
+      }
+      if(area > mArea){ mArea = area; mId = id; }
     }
-    if(area > mejorArea){ mejorArea = area; mejorId = id; }
+    return [mId, mArea];
   }
+  [mejorId, mejorArea] = buscarPapel(22);
+  if(mejorArea < n*0.12) [mejorId, mejorArea] = buscarPapel(100);
   if(mejorArea < n*0.12) return null;
 
   // 3) Extension del papel por filas/columnas (rellena los huecos que dejan las letras) y brillo tipico del papel
