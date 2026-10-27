@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '12';
+const APP_VERSION_CAPTURA = '13';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -178,6 +178,8 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
           <div id="pdfPreviewExtra" style="display:none; padding:10px; text-align:center; background:#f4f4fa; border-radius:4px; font-family:monospace; font-size:12px;">&#128196; PDF adjunto listo</div>
           <button class="accion" id="btnAgregarSegundaExtra" type="button" style="margin-top:6px; padding:6px 10px; font-size:12px; display:none;">&#10133; Agregar otra foto (ida/vuelta)</button>
           <button class="accion" id="btnAjustarExtra" type="button" style="margin-top:6px; padding:6px 10px; font-size:12px; display:none;">&#9986;&#65039; Ajustar a mano</button>
+          <button class="accion" id="btnAjustarExtra2" type="button" style="margin-top:6px; padding:6px 10px; font-size:12px; display:none;">&#9986;&#65039; Ajustar foto 2</button>
+          <button class="accion" id="btnQuitarFoto2" type="button" style="margin-top:6px; padding:6px 10px; font-size:12px; display:none;">&#10060; Quitar foto 2</button>
           <button class="accion" id="btnQuitarExtra" style="margin-top:6px; padding:6px 10px; font-size:12px;">&#10060; Quitar adjunto</button>
         </div>
         <input type="file" id="inputSegundaExtra" accept="image/*" capture="environment" style="display:none;">
@@ -290,7 +292,7 @@ document.getElementById('btnVolverMenu').addEventListener('click', ()=>{
   preview.style.display = 'none';
   archivoActual = null;
   archivoExtra = null;
-  originalParaAjuste = null; extraOriginalParaAjuste = null;
+  originalParaAjuste = null; resetExtra();
   document.getElementById('filaAjustar').style.display = 'none';
   const bloqueExtra = document.getElementById('bloqueAdjuntoExtra');
   if(bloqueExtra) bloqueExtra.style.display = 'none';
@@ -415,7 +417,6 @@ function detectarRecorteAuto(data, w, h){
 // Tipos de documento que se recortan solos (Firma y Voucher de Banco siguen igual)
 const TIPOS_AUTO_RECORTE = ['factura','voucher_movilidad'];
 let originalParaAjuste = null;      // {file, rect} de la foto principal, para "Ajustar a mano"
-let extraOriginalParaAjuste = null; // idem para el comprobante adicional
 
 // Devuelve {file, rect} con la foto ya recortada, o null si no se detecto un documento de forma confiable
 async function recortarAutomatico(file){
@@ -614,84 +615,103 @@ function combinarImagenesVertical(fileA, fileB){
   });
 }
 
-function mostrarPreviewExtra(file){
-  archivoExtra = file;
+// Comprobante adicional: hasta 2 fotos (ida/vuelta). Cada una conserva su original y su propio recorte;
+// se unen (1 arriba, 2 abajo) solo para la vista previa y el envio, asi cada una se ajusta por separado.
+let extraFotos = []; // [{orig, rect, actual, esPdf}]
+
+function resetExtra(){
+  extraFotos = [];
+  archivoExtra = null;
+  ['btnAjustarExtra','btnAjustarExtra2','btnQuitarFoto2'].forEach(id=>{ document.getElementById(id).style.display = 'none'; });
+}
+
+async function refrescarExtra(){
   const previewExtra = document.getElementById('previewExtra');
   const imgPreviewExtra = document.getElementById('imgPreviewExtra');
   const pdfPreviewExtra = document.getElementById('pdfPreviewExtra');
-  const btnAgregarSegunda = document.getElementById('btnAgregarSegundaExtra');
-  if(file.type === 'application/pdf'){
-    imgPreviewExtra.style.display = 'none';
-    pdfPreviewExtra.style.display = 'block';
-    btnAgregarSegunda.style.display = 'none'; // los PDF no se combinan
-  } else {
-    imgPreviewExtra.style.display = 'block';
-    pdfPreviewExtra.style.display = 'none';
-    imgPreviewExtra.src = URL.createObjectURL(file);
-    btnAgregarSegunda.style.display = 'block';
+  const btnAgregar = document.getElementById('btnAgregarSegundaExtra');
+  const btnAj1 = document.getElementById('btnAjustarExtra'), btnAj2 = document.getElementById('btnAjustarExtra2');
+  const btnQuitar2 = document.getElementById('btnQuitarFoto2');
+  if(!extraFotos.length){
+    archivoExtra = null; previewExtra.style.display = 'none';
+    btnAj1.style.display = btnAj2.style.display = btnQuitar2.style.display = btnAgregar.style.display = 'none';
+    return;
   }
+  const f0 = extraFotos[0];
+  if(f0.esPdf){ // los PDF no se recortan ni se combinan
+    archivoExtra = f0.actual;
+    imgPreviewExtra.style.display = 'none'; pdfPreviewExtra.style.display = 'block';
+    btnAj1.style.display = btnAj2.style.display = btnQuitar2.style.display = btnAgregar.style.display = 'none';
+    previewExtra.style.display = 'block';
+    return;
+  }
+  try{
+    archivoExtra = (extraFotos.length === 2) ? await combinarImagenesVertical(f0.actual, extraFotos[1].actual) : f0.actual;
+  } catch(err){
+    alert('No se pudo combinar las fotos: ' + err.message);
+    extraFotos.pop(); archivoExtra = f0.actual;
+  }
+  imgPreviewExtra.style.display = 'block'; pdfPreviewExtra.style.display = 'none';
+  imgPreviewExtra.src = URL.createObjectURL(archivoExtra);
   previewExtra.style.display = 'block';
-  document.getElementById('btnAjustarExtra').style.display = (extraOriginalParaAjuste && file.type !== 'application/pdf') ? 'inline-block' : 'none';
+  const dos = extraFotos.length === 2;
+  btnAgregar.style.display = dos ? 'none' : 'block';
+  btnAj1.style.display = 'inline-block'; btnAj1.textContent = dos ? '\u2702\uFE0F Ajustar foto 1' : '\u2702\uFE0F Ajustar a mano';
+  btnAj2.style.display = dos ? 'inline-block' : 'none';
+  btnQuitar2.style.display = dos ? 'inline-block' : 'none';
 }
 
 async function manejarArchivoExtraSeleccionado(file){
   if(!file) return;
   if(file.type === 'application/pdf'){
-    extraOriginalParaAjuste = null;
-    mostrarPreviewExtra(file);
+    extraFotos = [{ orig: file, rect: null, actual: file, esPdf: true }];
+    await refrescarExtra();
     return;
   }
   const auto = await recortarAutomatico(file);
   if(auto){
-    extraOriginalParaAjuste = { file, rect: auto.rect };
-    mostrarPreviewExtra(auto.file);
+    extraFotos = [{ orig: file, rect: auto.rect, actual: auto.file }];
+    await refrescarExtra();
     return;
   }
-  extraOriginalParaAjuste = null;
-  abrirEditorRecorte(file, mostrarPreviewExtra);
+  abrirEditorRecorte(file, (nuevo)=>{ extraFotos = [{ orig: file, rect: null, actual: nuevo }]; refrescarExtra(); });
 }
 
-document.getElementById('btnAjustarExtra').addEventListener('click', ()=>{
-  if(!extraOriginalParaAjuste) return;
-  abrirEditorRecorte(extraOriginalParaAjuste.file, mostrarPreviewExtra, extraOriginalParaAjuste.rect);
-});
+// Ajusta solo la foto i (0 = primera, 1 = segunda): abre el editor sobre SU original; la otra no se toca
+function ajustarFotoExtra(i){
+  const f = extraFotos[i];
+  if(!f || f.esPdf) return;
+  abrirEditorRecorte(f.orig, (nuevo)=>{ if(extraFotos[i]) extraFotos[i].actual = nuevo; refrescarExtra(); }, f.rect);
+}
+document.getElementById('btnAjustarExtra').addEventListener('click', ()=> ajustarFotoExtra(0));
+document.getElementById('btnAjustarExtra2').addEventListener('click', ()=> ajustarFotoExtra(1));
 
 document.getElementById('btnAbrirCamaraExtra').addEventListener('click', ()=> document.getElementById('inputCamaraExtra').click());
 document.getElementById('btnAbrirArchivosExtra').addEventListener('click', ()=> document.getElementById('inputArchivoExtra').click());
 document.getElementById('inputCamaraExtra').addEventListener('change', (e)=> manejarArchivoExtraSeleccionado(e.target.files[0]));
 document.getElementById('inputArchivoExtra').addEventListener('change', (e)=> manejarArchivoExtraSeleccionado(e.target.files[0]));
 
-async function combinarConSegundaFoto(segundaFotoFinal){
-  const btnAgregarSegunda = document.getElementById('btnAgregarSegundaExtra');
-  btnAgregarSegunda.disabled = true; btnAgregarSegunda.textContent = 'Combinando...';
-  try{
-    const combinado = await combinarImagenesVertical(archivoExtra, segundaFotoFinal);
-    archivoExtra = combinado;
-    document.getElementById('imgPreviewExtra').src = URL.createObjectURL(combinado);
-    btnAgregarSegunda.style.display = 'none'; // ya se combino, no se puede agregar una tercera
-    // "Ajustar a mano" sobre el resultado combinado (sin recuadro previo)
-    extraOriginalParaAjuste = { file: combinado, rect: null };
-    document.getElementById('btnAjustarExtra').style.display = 'inline-block';
-  } catch(err){
-    alert('No se pudo combinar las fotos: ' + err.message);
-  }
-  btnAgregarSegunda.disabled = false; btnAgregarSegunda.textContent = '\u2795 Agregar otra foto (ida/vuelta)';
-}
-
 document.getElementById('btnAgregarSegundaExtra').addEventListener('click', ()=> document.getElementById('inputSegundaExtra').click());
 document.getElementById('inputSegundaExtra').addEventListener('change', async (e)=>{
-  const segundaFoto = e.target.files[0];
-  if(!segundaFoto || !archivoExtra) return;
+  const segunda = e.target.files[0];
+  if(!segunda || extraFotos.length !== 1 || extraFotos[0].esPdf) return;
   e.target.value = '';
-  const auto = await recortarAutomatico(segundaFoto);
-  if(auto) combinarConSegundaFoto(auto.file);
-  else abrirEditorRecorte(segundaFoto, combinarConSegundaFoto);
+  const auto = await recortarAutomatico(segunda);
+  if(auto){
+    extraFotos[1] = { orig: segunda, rect: auto.rect, actual: auto.file };
+    await refrescarExtra();
+    return;
+  }
+  abrirEditorRecorte(segunda, (nuevo)=>{ extraFotos[1] = { orig: segunda, rect: null, actual: nuevo }; refrescarExtra(); });
+});
+
+document.getElementById('btnQuitarFoto2').addEventListener('click', ()=>{
+  if(extraFotos.length === 2){ extraFotos.pop(); refrescarExtra(); }
+  document.getElementById('inputSegundaExtra').value = '';
 });
 
 document.getElementById('btnQuitarExtra').addEventListener('click', ()=>{
-  archivoExtra = null;
-  extraOriginalParaAjuste = null;
-  document.getElementById('btnAjustarExtra').style.display = 'none';
+  resetExtra();
   document.getElementById('previewExtra').style.display = 'none';
   document.getElementById('inputCamaraExtra').value = '';
   document.getElementById('inputArchivoExtra').value = '';
@@ -701,7 +721,7 @@ document.getElementById('btnQuitarExtra').addEventListener('click', ()=>{
 document.getElementById('btnDescartar').addEventListener('click', ()=>{
   archivoActual = null;
   archivoExtra = null;
-  originalParaAjuste = null; extraOriginalParaAjuste = null;
+  originalParaAjuste = null; resetExtra();
   document.getElementById('filaAjustar').style.display = 'none';
   document.getElementById('btnAjustarExtra').style.display = 'none';
   preview.style.display = 'none';
@@ -824,7 +844,7 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
     btn.disabled = false; btn.textContent = 'Enviar a la laptop';
     archivoActual = null;
     archivoExtra = null;
-    originalParaAjuste = null; extraOriginalParaAjuste = null;
+    originalParaAjuste = null; resetExtra();
     document.getElementById('filaAjustar').style.display = 'none';
     document.getElementById('btnAjustarExtra').style.display = 'none';
     preview.style.display = 'none';
