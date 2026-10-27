@@ -193,7 +193,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.62</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.63</div>
     </div>
   </header>
 
@@ -1630,8 +1630,24 @@ function copiarMensajeFactura(i, btnEl){
   copiarAlPortapapeles(texto, btnEl);
 }
 
-function eliminarRegistro(modo, i){
-  if(modo==='factura') registros.splice(i,1); else registrosMov.splice(i,1);
+// Elimina un registro de la pantalla Y de la base de datos (antes solo se quitaba de la pantalla y reaparecia al recargar)
+async function eliminarRegistro(modo, i){
+  const lista = modo==='factura' ? registros : registrosMov;
+  const r = lista[i];
+  if(!r) return;
+  const aviso = r.origenCaja ? `\n\nEste registro vino de la caja ${r.origenCaja}; al eliminarlo no volver\u00e1 a esa caja.` : '';
+  if(!confirm(`\u00bfEliminar definitivamente este registro?\n\n${r.descripcion||''} \u2014 ${fmt(r.total)}${aviso}\n\nSe borra tambi\u00e9n de la base de datos y no se puede deshacer.`)) return;
+  if(r.id){
+    const tabla = modo==='factura' ? 'comprobantes' : 'vales_movilidad';
+    // .select() devuelve las filas borradas: si no borro ninguna (sin permiso o ya no existia) no se da por eliminado
+    const { data, error } = await supabaseClient.from(tabla).delete().eq('id', r.id).select('id');
+    if(error || !data || data.length === 0){
+      alert('No se pudo eliminar de la base de datos' + (error ? ': ' + error.message : '') + '.\n\nEl registro NO se borr\u00f3.');
+      return;
+    }
+  }
+  const k = lista.indexOf(r); // se busca de nuevo: la lista pudo cambiar mientras se esperaba la respuesta
+  if(k >= 0) lista.splice(k, 1);
   renderTabla();
   guardarEnArchivoConectado();
 }
