@@ -193,7 +193,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.61</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.62</div>
     </div>
   </header>
 
@@ -1315,7 +1315,7 @@ function renderTabla(){
         <td class="small">${r.fecha}</td>
         <td>${r.solicitante}</td>
         <td class="small">${r.documento||'&mdash;'}</td>
-        <td>${r.descripcion}${r.tipo==='Vale Provisional' ? (r.liquidado ? ` <span class="badge" style="background:var(--ok-soft); color:var(--ok);">&#9989; Pagado ${r.fechaLiquidacion||''}</span>` : ` <span class="badge" style="background:#fff3cd; color:#8a6d00;">&#9888;&#65039; Provisional</span>`) : ''}</td>
+        <td>${r.descripcion}${r.origenCaja ? ` <span class="badge" style="background:#e8eaf6; color:#3949ab;">de caja ${r.origenCaja}</span>` : ''}${r.tipo==='Vale Provisional' ? (r.liquidado ? ` <span class="badge" style="background:var(--ok-soft); color:var(--ok);">&#9989; Pagado ${r.fechaLiquidacion||''}</span>` : ` <span class="badge" style="background:#fff3cd; color:#8a6d00;">&#9888;&#65039; Provisional</span>`) : ''}</td>
         <td class="small">${r.cuenta}</td>
         <td class="num">${fmt(r.total)}</td>
         <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('factura',${i})">&#128065; Ver</button>` : ''}${(r.tipo==='Gasto Sodexo'||r.tipo==='Refacturable') ? `<button class="del-btn" style="color:#6a4fb0;" onclick="copiarMensajeFactura(${i},this)">&#128203; Copiar</button>` : ''}${r.tipo==='Vale Provisional' ? (r.liquidado ? `<button class="del-btn" style="color:#8a6d00;" onclick="desmarcarLiquidado(${i})">Desmarcar pagado</button>` : `<button class="del-btn" style="color:var(--ok);" onclick="marcarLiquidado(${i})">&#128176; Marcar como pagado</button>`) : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('factura',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('factura',${i})">Eliminar</button></td>
@@ -1340,7 +1340,7 @@ function renderTabla(){
         <td class="small">${r.fecha}</td>
         <td>${r.solicitante}</td>
         <td class="small">${r.dni}</td>
-        <td>${r.descripcion}</td>
+        <td>${r.descripcion}${r.origenCaja ? ` <span class="badge" style="background:#e8eaf6; color:#3949ab;">de caja ${r.origenCaja}</span>` : ''}</td>
         <td class="small">${r.origenDestino}</td>
         <td class="num">${fmt(r.total)}</td>
         <td>${r.evidencia ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad',${i})">&#128065; Ver Vale</button>` : ''}${r.evidenciaExtra ? `<button class="del-btn" style="color:var(--ok);" onclick="verEvidencia('movilidad-extra',${i})">&#128065; Ver Comprobante</button>` : ''}<button class="del-btn" style="color:var(--accent2, #3a6ea5);" onclick="editarRegistro('movilidad',${i})">Editar</button><button class="del-btn" onclick="eliminarRegistro('movilidad',${i})">Eliminar</button></td>
@@ -1793,14 +1793,14 @@ async function verDetalleCajaCerrada(id){
 
   const filasComp = comp.map((r,i)=>`<tr class="hist-row">
     <td style="${H_TD}">${hEsc(r.fecha)}</td><td style="${H_TD}">${hEsc(r.documento||'')}</td><td style="${H_TD}">${hEsc(r.solicitante||'')}</td>
-    <td style="${H_TD}">${hEsc(r.descripcion||'')}</td><td style="${H_TD}">${hEsc(r.tipo||'')}</td>
+    <td style="${H_TD}">${hEsc(r.descripcion||'')}${r.rechazada ? ` <b style="color:#b00020;">RECHAZADA \u2192 pas\u00f3 a caja ${hEsc(r.rechazada_a_caja||'')}</b>` : ''}${r.origen_caja_numero ? ` <i style="color:#3949ab;">(de caja ${hEsc(r.origen_caja_numero)})</i>` : ''}</td><td style="${H_TD}">${hEsc(r.tipo||'')}</td>
     <td style="${H_TD} text-align:right;">${hMonto(r.importe)}</td>
     <td style="${H_TD}">${r.evidencia_url ? `<button type="button" style="${H_BTN}" onclick="verEvidenciaHistorial('comp',${i},1)">&#128065; Ver factura</button>` : '<span style="color:#999;">sin foto</span>'}</td>
   </tr>`).join('') || `<tr><td colspan="7" style="${H_TD} text-align:center;">Sin facturas</td></tr>`;
 
   const filasVales = vales.map((r,i)=>`<tr class="hist-row">
     <td style="${H_TD}">${hEsc(r.fecha)}</td><td style="${H_TD}">${hEsc(r.solicitante||'')}</td><td style="${H_TD}">${hEsc(r.dni||'')}</td>
-    <td style="${H_TD}">${hEsc(r.motivo||'')}</td><td style="${H_TD}">${hEsc(r.origen_destino||'')}</td>
+    <td style="${H_TD}">${hEsc(r.motivo||'')}${r.rechazada ? ` <b style="color:#b00020;">RECHAZADO \u2192 pas\u00f3 a caja ${hEsc(r.rechazada_a_caja||'')}</b>` : ''}${r.origen_caja_numero ? ` <i style="color:#3949ab;">(de caja ${hEsc(r.origen_caja_numero)})</i>` : ''}</td><td style="${H_TD}">${hEsc(r.origen_destino||'')}</td>
     <td style="${H_TD} text-align:right;">${hMonto(r.importe)}</td>
     <td style="${H_TD}">${r.evidencia_url ? `<button type="button" style="${H_BTN}" onclick="verEvidenciaHistorial('vales',${i},1)">&#128065; Vale</button>` : ''}${r.evidencia2_url ? `<button type="button" style="${H_BTN}" onclick="verEvidenciaHistorial('vales',${i},2)">&#128065; Comprobante</button>` : ''}${(!r.evidencia_url && !r.evidencia2_url) ? '<span style="color:#999;">sin foto</span>' : ''}</td>
   </tr>`).join('') || `<tr><td colspan="7" style="${H_TD} text-align:center;">Sin vales</td></tr>`;
@@ -1819,7 +1819,7 @@ async function verDetalleCajaCerrada(id){
     </div>
     <div style="font-family:Arial; font-size:12px; margin-bottom:4px;">
       Fondo fijo: <b>${hMonto(c.fondo_fijo)}</b> &nbsp;|&nbsp; Saldo inicial banco: <b>${hMonto(c.saldo_inicial_banco)}</b> &nbsp;|&nbsp;
-      Facturas: <b>${hMonto(totalComp)}</b> &nbsp;|&nbsp; Vales: <b>${hMonto(totalVales)}</b> &nbsp;|&nbsp; Monto de cierre: <b>${hMonto(c.monto_cierre)}</b> &nbsp;|&nbsp;
+      Facturas: <b>${hMonto(totalComp)}</b> &nbsp;|&nbsp; Vales: <b>${hMonto(totalVales)}</b> &nbsp;|&nbsp; Monto de cierre: <b>${hMonto(c.monto_cierre)}</b> &nbsp;|&nbsp; ${c.monto_reembolsado!=null ? `Reembolsado: <b>${hMonto(c.monto_reembolsado)}</b> &nbsp;|&nbsp; Rechazado: <b>${hMonto((parseFloat(c.monto_cierre)||0)-(parseFloat(c.monto_reembolsado)||0))}</b> &nbsp;|&nbsp;` : ''}
       Cierre: <b>${hEsc(c.fecha_cierre||'')}</b> &nbsp;|&nbsp; ${c.reembolsada?'Reembolsada':'Pendiente de reembolso'}
     </div>
     ${titulo('FACTURAS / COMPROBANTES ('+comp.length+')')}
@@ -3011,14 +3011,16 @@ async function restaurarCajaDesdeSupabase(){
         descripcion:r.descripcion, detalle:r.detalle||'', unidad:'SOLES', cantidad:parseFloat(r.cantidad)||1, precio:parseFloat(r.precio)||parseFloat(r.importe),
         sinIgv: parseFloat(r.importe)/1.18, total:parseFloat(r.importe), tipo:r.tipo||'', cuenta:r.cuenta||'', serviceCat:r.service_cat||'',
         evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null,
-        liquidado: !!r.liquidado, fechaLiquidacion: r.fecha_liquidacion||null
+        liquidado: !!r.liquidado, fechaLiquidacion: r.fecha_liquidacion||null,
+        origenCaja: r.origen_caja_numero||null
       }));
       if(vales) registrosMov = vales.map(r=>{
         const total = parseFloat(r.importe);
         return { id: r.id, fecha:r.fecha, dni:r.dni||'', solicitante:r.solicitante, tipo:r.tipo||'', descripcion:r.motivo||'',
           origenDestino:r.origen_destino||'', total, afecto: Math.min(total,AFECTO_LIMITE), inafecto: Math.max(0,total-AFECTO_LIMITE),
           fotoManual:null, evidencia: r.evidencia_url ? {dataUrl:r.evidencia_url, tipo:''} : null,
-          evidenciaExtra: r.evidencia2_url ? {dataUrl:r.evidencia2_url, tipo:''} : null };
+          evidenciaExtra: r.evidencia2_url ? {dataUrl:r.evidencia2_url, tipo:''} : null,
+          origenCaja: r.origen_caja_numero||null };
       });
       if(movBanco) movimientosBanco = movBanco.map(m=>({ id:m.id, fecha:m.fecha, tipo:m.tipo, descripcion:m.descripcion, monto:parseFloat(m.monto), evidencia: m.evidencia_url ? {dataUrl:m.evidencia_url, tipo:''} : null }));
 
@@ -3273,34 +3275,159 @@ document.getElementById('btnVerMovilidad').addEventListener('click', ()=>{
   abrirModal('Vista previa — Planilla de Movilidad', html);
 });
 
-// ── Marcar una caja cerrada como reembolsada: sale de "Pendientes de Reposicion" y crea el ingreso en Banco en Vivo ──
-async function marcarCajaReembolsada(i){
+// ── Reembolso de una caja cerrada (total o parcial) ──
+let reembolsoCtx = null;
+let reembolsoEnCurso = false;
+const R_TH = 'text-align:left; padding:6px 8px; background:#f2f2f2; border:1px solid #ccc; font-family:Arial; font-size:11px;';
+const R_TD = 'padding:5px 8px; border:1px solid #ddd; font-family:Arial; font-size:12px; vertical-align:top;';
+function rEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function rMonto(n){ return 'S/ ' + (parseFloat(n)||0).toFixed(2); }
+
+// Registrar el reembolso de una caja cerrada (total o parcial). Si Sodexo rechazo facturas/vales, se marcan aqui:
+// la caja cerrada conserva lo pedido/pagado/rechazado y lo rechazado pasa a la caja abierta para reembolsarse despues.
+async function registrarReembolso(i){
   const c = cajasCerradas[i];
   if(!c) return;
-  if(!confirm(`\u00bfConfirmas que Sodexo ya te reembols\u00f3 la Caja ${c.numero} por S/ ${c.monto.toFixed(2)}?\n\nSaldr\u00e1 de "Pendientes de Reposici\u00f3n" y se crear\u00e1 un INGRESO por ese monto en el Banco en Vivo de la caja actualmente abierta.`)) return;
+  if(!cajaIdActual){
+    alert('Primero debe estar abierta la siguiente caja: el ingreso del dep\u00f3sito y lo rechazado se registran en ella.');
+    return;
+  }
+  abrirModal('Registrar reembolso \u2014 Caja ' + c.numero, '<div style="padding:20px; font-family:Arial;">Cargando...</div>');
+  const [rc, rv, rcaja] = await Promise.all([
+    supabaseClient.from('comprobantes').select('*').eq('caja_id', c.id).order('fecha',{ascending:true}),
+    supabaseClient.from('vales_movilidad').select('*').eq('caja_id', c.id).order('fecha',{ascending:true}),
+    supabaseClient.from('cajas').select('id,reembolsada').eq('id', c.id).single()
+  ]);
+  const err = rc.error || rv.error || rcaja.error;
+  if(err){ modalContenido.innerHTML = '<div style="padding:20px; font-family:Arial; color:#c00;">No se pudo cargar la caja: ' + rEsc(err.message) + '</div>'; return; }
+  if(rcaja.data && rcaja.data.reembolsada){ modalContenido.innerHTML = '<div style="padding:20px; font-family:Arial;">Esta caja ya fue marcada como reembolsada.</div>'; return; }
+  // Solo lo que form\u00f3 parte del monto pedido
+  const comp = (rc.data||[]).filter(r=> !r.rechazada && !(r.tipo==='Vale Provisional' && r.liquidado));
+  const vales = (rv.data||[]).filter(r=> !r.rechazada);
+  reembolsoCtx = { caja: c, comp, vales };
 
+  const filasComp = comp.map((r,k)=>`<tr>
+    <td style="${R_TD}"><input type="checkbox" class="rb-chk" data-t="comp" data-i="${k}" onchange="rbRecalcular()"></td>
+    <td style="${R_TD}">${rEsc(r.fecha)}</td><td style="${R_TD}">${rEsc(r.documento||'')}</td><td style="${R_TD}">${rEsc(r.solicitante||'')}</td>
+    <td style="${R_TD}">${rEsc(r.descripcion||'')}</td><td style="${R_TD} text-align:right;">${rMonto(r.importe)}</td></tr>`).join('');
+  const filasVales = vales.map((r,k)=>`<tr>
+    <td style="${R_TD}"><input type="checkbox" class="rb-chk" data-t="vale" data-i="${k}" onchange="rbRecalcular()"></td>
+    <td style="${R_TD}">${rEsc(r.fecha)}</td><td style="${R_TD}">${rEsc(r.dni||'')}</td><td style="${R_TD}">${rEsc(r.solicitante||'')}</td>
+    <td style="${R_TD}">${rEsc(r.motivo||'')}</td><td style="${R_TD} text-align:right;">${rMonto(r.importe)}</td></tr>`).join('');
+  const cab = `<tr><th style="${R_TH}">Rechazada</th><th style="${R_TH}">Fecha</th><th style="${R_TH}">Documento / DNI</th><th style="${R_TH}">Solicitante</th><th style="${R_TH}">Detalle</th><th style="${R_TH} text-align:right;">Importe</th></tr>`;
   const hoy = new Date().toISOString().slice(0,10);
-  if(c.id){
-    try{
-      await supabaseClient.from('cajas').update({ reembolsada: true, fecha_reembolso: hoy }).eq('id', c.id);
-    } catch(e){ console.warn('No se pudo marcar la caja como reembolsada en Supabase:', e.message); }
-  }
+  modalContenido.innerHTML = `<div style="padding:16px 20px; font-family:Arial; font-size:13px;">
+    <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+      <div><label style="font-size:11px;">Monto pedido</label><br><b style="font-size:15px;">${rMonto(c.monto)}</b></div>
+      <div><label for="rbMonto" style="font-size:11px;">Monto depositado (S/)</label><br><input type="number" id="rbMonto" step="0.01" min="0" value="${c.monto.toFixed(2)}" oninput="rbRecalcular()" style="padding:6px 8px; width:140px; font-size:14px;"></div>
+      <div><label for="rbFecha" style="font-size:11px;">Fecha del dep\u00f3sito</label><br><input type="date" id="rbFecha" value="${hoy}" style="padding:6px 8px; font-size:13px;"></div>
+    </div>
+    <div style="margin-bottom:6px;">Diferencia a justificar: <b id="rbDif">S/ 0.00</b> &nbsp;|&nbsp; Marcado como rechazado: <b id="rbSel">S/ 0.00</b></div>
+    <div id="rbEstado" style="font-weight:bold; margin-bottom:10px; min-height:18px;"></div>
+    <div style="font-size:12px; color:#555; margin-bottom:6px;">Si Sodexo pag\u00f3 todo, deja el monto completo y no marques nada. Si rechaz\u00f3 algo, escribe lo depositado y marca lo rechazado: pasar\u00e1 a la caja ${rEsc(cajaActiva)} para reembolsarse despu\u00e9s.</div>
+    <h3 style="font-size:12px; margin:10px 0 4px; color:#4b0082;">FACTURAS / COMPROBANTES (${comp.length})</h3>
+    <table style="border-collapse:collapse; width:100%;"><thead>${cab}</thead><tbody>${filasComp || '<tr><td colspan="6" style="'+R_TD+'">Sin facturas</td></tr>'}</tbody></table>
+    <h3 style="font-size:12px; margin:14px 0 4px; color:#4b0082;">VALES DE MOVILIDAD (${vales.length})</h3>
+    <table style="border-collapse:collapse; width:100%;"><thead>${cab}</thead><tbody>${filasVales || '<tr><td colspan="6" style="'+R_TD+'">Sin vales</td></tr>'}</tbody></table>
+    <div style="margin-top:14px; display:flex; gap:8px;">
+      <button type="button" id="rbConfirmar" onclick="confirmarReembolso()" style="padding:10px 18px; font-size:13px;">Confirmar reembolso</button>
+      <button type="button" onclick="document.getElementById('btnVerArqueo').click()" style="padding:10px 18px; font-size:13px;" class="secondary">&larr; Volver al Arqueo</button>
+    </div>
+  </div>`;
+  rbRecalcular();
+}
 
-  if(cajaIdActual){
-    const mov = { fecha: hoy, tipo: 'ingreso', descripcion: `Reembolso Sodexo - Caja ${c.numero}`, monto: c.monto, id: null };
-    movimientosBanco.push(mov);
-    try{
-      const { data, error } = await supabaseClient.from('movimientos_banco')
-        .insert({ caja_id: cajaIdActual, fecha: hoy, tipo: 'ingreso', descripcion: mov.descripcion, monto: c.monto }).select('id').single();
-      if(!error && data) mov.id = data.id;
-    } catch(e){ console.warn('No se pudo registrar el ingreso en Banco en Vivo:', e.message); }
-    renderBancoEnVivo();
-  } else {
-    alert('No hay ninguna caja abierta ahora mismo, as\u00ed que no se pudo registrar el ingreso en Banco en Vivo autom\u00e1ticamente. Agr\u00e9galo manualmente cuando abras la pr\u00f3xima caja.');
-  }
+function rbRecalcular(){
+  const ctx = reembolsoCtx; if(!ctx) return;
+  const r2 = (x)=> Math.round(x*100)/100;
+  const pedido = r2(ctx.caja.monto);
+  const dep = r2(parseFloat(document.getElementById('rbMonto').value)||0);
+  const dif = r2(pedido - dep);
+  let sel = 0, n = 0;
+  document.querySelectorAll('#modalContenido .rb-chk').forEach(ch=>{
+    if(ch.checked){ const it = (ch.dataset.t==='comp' ? ctx.comp : ctx.vales)[+ch.dataset.i]; sel += parseFloat(it.importe)||0; n++; }
+  });
+  sel = r2(sel);
+  let msg = '', ok = false;
+  if(dep <= 0) msg = 'Escribe el monto depositado.';
+  else if(dif < -0.004) msg = 'El dep\u00f3sito no puede ser mayor al monto pedido (' + rMonto(pedido) + ').';
+  else if(Math.abs(dif) < 0.005){ if(n>0) msg = 'El dep\u00f3sito cubre todo: desmarca lo rechazado.'; else { ok = true; msg = 'Reembolso completo.'; } }
+  else if(Math.abs(sel - dif) < 0.005){ ok = true; msg = 'Cuadra: lo marcado suma exactamente la diferencia.'; }
+  else msg = (sel < dif) ? ('Faltan ' + rMonto(dif - sel) + ' por marcar.') : ('Te pasaste por ' + rMonto(sel - dif) + '.');
+  document.getElementById('rbDif').textContent = rMonto(Math.max(dif,0));
+  document.getElementById('rbSel').textContent = rMonto(sel);
+  const est = document.getElementById('rbEstado'); est.textContent = msg; est.style.color = ok ? '#1b7a3a' : '#b00020';
+  document.getElementById('rbConfirmar').disabled = !ok;
+}
 
-  cajasCerradas.splice(i,1);
-  document.getElementById('btnVerArqueo').click(); // refresca la vista del Arqueo con los datos actualizados
+async function confirmarReembolso(){
+  if(reembolsoEnCurso) return; // evita doble clic
+  const ctx = reembolsoCtx; if(!ctx) return;
+  rbRecalcular();
+  const btn = document.getElementById('rbConfirmar');
+  if(btn.disabled) return;
+  const r2 = (x)=> Math.round(x*100)/100;
+  const dep = r2(parseFloat(document.getElementById('rbMonto').value)||0);
+  const fecha = document.getElementById('rbFecha').value || new Date().toISOString().slice(0,10);
+  const marcadosComp = [], marcadosVales = [];
+  document.querySelectorAll('#modalContenido .rb-chk').forEach(ch=>{
+    if(!ch.checked) return;
+    if(ch.dataset.t==='comp') marcadosComp.push(ctx.comp[+ch.dataset.i]); else marcadosVales.push(ctx.vales[+ch.dataset.i]);
+  });
+  reembolsoEnCurso = true; btn.disabled = true; btn.textContent = 'Guardando...';
+  const est = document.getElementById('rbEstado');
+  try{
+    // 0) la caja no debe estar ya reembolsada
+    const { data: chk, error: e0 } = await supabaseClient.from('cajas').select('reembolsada').eq('id', ctx.caja.id).single();
+    if(e0) throw e0;
+    if(chk && chk.reembolsada) throw new Error('Esta caja ya fue marcada como reembolsada.');
+    const lotes = [['comprobantes', marcadosComp], ['vales_movilidad', marcadosVales]];
+    // 1) copiar lo rechazado a la caja abierta (si la copia ya existe no se duplica)
+    for(const [tabla, lista] of lotes){
+      for(const orig of lista){
+        const { data: ya, error: eY } = await supabaseClient.from(tabla).select('id').eq('caja_id', cajaIdActual).eq('origen_id', orig.id);
+        if(eY) throw eY;
+        if(!ya || ya.length === 0){
+          const { id, caja_id, created_at, rechazada, rechazada_a_caja, origen_caja_numero, origen_id, liquidado, fecha_liquidacion, ...resto } = orig;
+          const { error: eI } = await supabaseClient.from(tabla).insert({ ...resto, caja_id: cajaIdActual, origen_caja_numero: String(ctx.caja.numero), origen_id: orig.id });
+          if(eI) throw eI;
+        }
+      }
+    }
+    // 2) marcar las originales como rechazadas (solo control interno, en la caja cerrada)
+    for(const [tabla, lista] of lotes){
+      for(const orig of lista){
+        const { error: eU } = await supabaseClient.from(tabla).update({ rechazada: true, rechazada_a_caja: String(cajaActiva) }).eq('id', orig.id);
+        if(eU) throw eU;
+      }
+    }
+    // 3) ingreso del deposito en Banco en Vivo de la caja abierta (una sola vez)
+    const descr = 'Reembolso Sodexo - Caja ' + ctx.caja.numero;
+    const { data: yaIng, error: eG } = await supabaseClient.from('movimientos_banco').select('id').eq('caja_id', cajaIdActual).eq('tipo','ingreso').eq('descripcion', descr);
+    if(eG) throw eG;
+    if(!yaIng || yaIng.length === 0){
+      const { error: eM } = await supabaseClient.from('movimientos_banco').insert({ caja_id: cajaIdActual, fecha, tipo: 'ingreso', descripcion: descr, monto: dep });
+      if(eM) throw eM;
+    }
+    // 4) por ultimo, cerrar el reembolso de la caja (conserva lo pedido; guarda lo pagado)
+    const { error: eC } = await supabaseClient.from('cajas').update({ reembolsada: true, fecha_reembolso: fecha, monto_reembolsado: dep }).eq('id', ctx.caja.id);
+    if(eC) throw eC;
+
+    await restaurarCajaDesdeSupabase(); // recarga la caja abierta: copias, ingreso y Seccion 4
+    const dif = r2(ctx.caja.monto - dep);
+    reembolsoCtx = null;
+    modalContenido.innerHTML = `<div style="padding:20px; font-family:Arial; font-size:13px;">
+      <div style="font-size:15px; font-weight:bold; color:#1b7a3a; margin-bottom:10px;">&#9989; Reembolso registrado \u2014 Caja ${rEsc(ctx.caja.numero)}</div>
+      <div>Pedido: <b>${rMonto(ctx.caja.monto)}</b> &nbsp;|&nbsp; Depositado: <b>${rMonto(dep)}</b> &nbsp;|&nbsp; Rechazado: <b>${rMonto(dif)}</b></div>
+      <div style="margin-top:6px;">Ingreso de ${rMonto(dep)} registrado en Banco en Vivo de la caja ${rEsc(cajaActiva)}.${(marcadosComp.length+marcadosVales.length) ? ' Lo rechazado (' + (marcadosComp.length+marcadosVales.length) + ' registro(s)) pas\u00f3 a la caja ' + rEsc(cajaActiva) + ' para reembolsarse despu\u00e9s.' : ''}</div>
+      <div style="margin-top:14px;"><button type="button" onclick="document.getElementById('btnVerArqueo').click()" style="padding:10px 18px; font-size:13px;">Ver Arqueo</button></div></div>`;
+  } catch(e){
+    est.style.color = '#b00020';
+    est.textContent = 'No se pudo completar: ' + e.message + '. Puedes volver a intentarlo; no se duplican las copias ni el ingreso.';
+    btn.disabled = false; btn.textContent = 'Confirmar reembolso';
+  } finally {
+    reembolsoEnCurso = false;
+  }
 }
 
 document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
@@ -3325,7 +3452,7 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
 
   const filaComprobantes = registros.filter(r=>!(r.tipo==='Vale Provisional' && r.liquidado)).map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bFc}">${r.documento||''}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
   const filaVales = registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">${autorizanteActual}</td></tr>`).join('');
-  const filaPendientes = cajasCerradas.map((c,i)=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td><td style="${bFc}"><button type="button" style="padding:4px 8px; font-size:10px; background:var(--ok); color:#fff; border:none; border-radius:3px; cursor:pointer;" onclick="marcarCajaReembolsada(${i})">&#9989; Reembolsada</button></td></tr>`).join('');
+  const filaPendientes = cajasCerradas.map((c,i)=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td><td style="${bFc}"><button type="button" style="padding:4px 8px; font-size:10px; background:var(--ok); color:#fff; border:none; border-radius:3px; cursor:pointer;" onclick="registrarReembolso(${i})">&#9989; Registrar reembolso</button></td></tr>`).join('');
 
   const denominaciones = [200,100,50,20,10];
   const monedas = [5,2,1,0.5,0.2,0.1,0.05,0.01];
