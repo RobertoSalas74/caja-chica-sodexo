@@ -193,7 +193,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.60</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.61</div>
     </div>
   </header>
 
@@ -614,7 +614,7 @@ const CUENTAS = ['ATENCION AL PERSONAL','BOTIQUIN','CAPACITACION','COMBUSTIBLE',
 
 const SERVICE_CATS = ['5400398','BUILDING ENVELOPE','BUILDING INTERIOR','BUILDING PLUMPING','NO TRIBUTARIO'];
 
-const AFECTO_LIMITE = 45.20;
+const AFECTO_LIMITE = 49.20;
 
 const LOGO_SODEXO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFBMVEUAAAD////fAALhAArgAAfnAA/hAA/hAA3iABHiABXtART2XWr2ZXL5yMzoABbjARnmECXmJjnpOk3rUmHuaHbvc4HxfYr0oKn/9fbxhZL85unJBCL13OH++fqvBS5hHV12WpDBudD7+/36+vz9/f4kK30AGHl6hbX19vr09fkAG3wAG3sAGXrt7/YAH34AHn0AHXwAHHvd4e7l6PLk5/EAIX8AIn8HKYQMLYYzT5pXbqxdc65me7OSocmYpsyfrM+9xt7K0eTP1efU2urS2Ojf4+/g5O/i5vHh5fDn6vPm6fLp7PTo6/Pw8vj4+fz3+Pv29/oAJYUAI4AAJIABJoEBJYECJoEDJ4IEJ4IFKIMGKYMHKoQHKoMIK4QIKoMJLIUKLYULLoYLLYYLLoUMLoYNL4cOMIcPMYgQMogSNIkTNIoUN4wVNosWN4sXOIwYOY0aOo0bO44cPI4dPY8ePY8ePo8fP5AgP5AhQZEiQZEjQpIjQpEkQ5IlRJMmRZMnRpQoR5UpSJUqSJUrSZYuTJcuS5cvTZgwTZgxTpgyT5kzUJo0UZo2U5s4VJw5Vp06Vp09WJ8/W6BAW6BBXKFAWp9DXqJDXaJDXaFFX6NGYKNHYaRKY6VLZaZNZqdOaKdPaahQaahSaqlTa6lVbatYb6xYcKxbc65aca1bcq1edbBddK9gd7Bgdq9ieLFheLBjebJle7NofbRnfLNpf7Vqf7VrgLVtgrZxhbl1iLp4i7x5jLx4i7t9j76AksB/kb+DlMGFlsKHmMOJmsSOnsePn8eQoMiTo8qUo8qTosmVpMqWpcuXpsuZp8ycqs6bqc2grc+ir9GksdKms9OsuNauutewu9ixvNiwu9ezvtm3wdu5w9y/yN/Cy+HI0OPP1ujM0+XQ1+jW3Ovb4O3d4u7c4e3w8veqt9W1wNrDzOHEzeLM1OXY3uzf5O/k6PHr7vXq7fQALYru8fft8Pbs7/Xy9Pj4+fsHOJHv8vezyeP7/P32/v/+///8/f3//f3+/v7///+d5OpoAAABAHRSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8AU/cHJQAABZtJREFUeNrtmHtUFHUUx/1pili+H5iPLCVbRWZJ3LEMBFnNF7g0v2ZnZpdtBpqZBeIpLSiJGIr4hrTyhU98laH4YoVEbfGJyiMV5aWZghkmglGRxnF2d0BOf+x6Omfb04n9Z34zv3vu5/zu797vvWc7ALv+Ovwf8L437IrPO2UvfL0PANVhecLKvdkO+F/T3rl5YcxBd6/t3o/tEfzikdrQt6Jixnxrn7tvXKhi+UD4tZ1SryKe5nledcUe+OGV23GVVsCPDz4169/H+x5bvTKaFfC6hPmezXap+00YQevuSEb42+Xuq6Oij2sWNNpGdhSu1VYsroVXgawFzrbAP85KDDFYsZk4CYCG7Ce2wPvpcNn3lk0GDTFpn01OXxtMh9RapvcbaLuGW4TTc+stGQztM8CG/f4QpNY0WzLo22vQP8A3ud66V1ElfzCqyaxdP5YWXPKua2MwteZETk5uXrIGHhOzoOqSZ2GlBIDp5RU+rWb9OoqHd/U+fcJwffpz4Uv3L4vlcFTJhL09Q3i9n7ssFEVkKt2EyWK+l6yLgG4uLi5ShidMWn53Qjz5potUnWhomqpDmDLRUf8XzIcv3xZHSd0QInrPWKv4cVuVqJSMXpCyOClikxBZLx0qw3VJke9/gEZ4Gw2mbIa4TLtk7Yb1KSzHCGVVt5dEsPlfbEwZr5bmg+sUGXPb5GmAQycn4fEgi4IyNjE5TEmjc32s4H9fKQsKy6uskzQ2+lcLwTwK1fDLqzMl004GcsT8BoH+KcbQ+h+MDaQA0vH1YNpSlJhT7AeAxIMkUwE4gBLL/YyR7+LQZ6gw5CxBaerwpFH+tYcpLZY2yzK+FOOxE89eCyCrPKAwLXNxHr0IwFaUZS6bNzMIcg0Yno6qE83VVwNVKwCYuYiCE/78q1+Xrr2EmldsQFm2xGy/leCVZZbxZ1E+YE2FuygT74bR1GpxfZPh4FFQTnFKcXBRLNTgX4EiNFBrDuntlWrZN8LzJ4Z5740XOzk6GkNfKONhnui7BOfhWct4H4bgVHTUiqyJxhMZUJ64K+5M1rICfhcMivAVsySCgQXgM4qeV1hz/WrR0dkkjJMbN/Ifvv5K554OLwtLyXKKntsgerhCcPC8ldQrXapVQgSFGH8aDF9FBaQoxI1yikfPgeUBxEbxQxnJsvLqSEaLu0hlMukYhEk35xx4dXC3nt1MNVdJcTCnxfUpyOOXrRVek/xaYW6Khtcwd+rCgvDMlu/Z8MOQ+/VRDNSLH/JROlbhE8SyR/anJSenZZ65KW449erRo8ewP0yDJs7jxS0eNpB07MznUj3JdpIjKn1DAvEDLbEPD8R2A9c4Gh4RB6nPVfhOUKlhqXtCHvi3kfmujp0HD3v40T3j1WM8XiNu3KU5VP+copuFc7RcEa9RLzY7/mUpqQmdDB6vJTSJ5hZvwDm8HEwJCRQyos2ve+9ODo4vvfYbTenkxmLgcVEYb8WpA2KmWcRLxM746LtgDk/1B7mIltw51dm5/lICFUAZFa4I41RpZY8aKvfSLOLRDJrWQyZS3upgYP8uHXv27Q7AVRVDJUwB7tFqNrhE0G6/whi1Ksjbouo17/w4dd2WXVtWz1NqsMifhVExRRZIzl6VmqDEUZ05azyQAEKji2MwUrZDkCVQFapUz5n4wNzgnHo79hnQ3bT2IoPIxeOAF6ZmmBXp65MIEo0ttaz5DUnIaBeX0aOlCBaeYTrSuB3BqEwqlRKfZItZ/SR/oRpFEJRb5mmOlHcyRKRzMo7o9ReGODkNeaYgFDoyuRZcjMMg4uaGYNEHx1ppOc6+ZSezM/fs3qe/2HpJtwyH9x3MudymrSsqDMePn7/R1Hpj5zIWhQfP25j/t45WfEifKcxCrp57N6dv8zgzw3aTrqKubkT7vxvt+HZ8O/4/gH8KkMwKEC7NrdoAAAAASUVORK5CYII=";
 
@@ -2017,8 +2017,8 @@ function construirHojaMovilidad(wb, nombre, periodoTexto, filas){
   ws.getCell('E10').value='Usuario de la Movilidad'; ws.getCell('E10').font={name:'Arial',size:10};
   ws.getCell('G10').value='Direcciones'; ws.getCell('G10').font={name:'Arial',size:10};
   const moneyFmt = '"S/."\\ #,##0.00;[Red]"S/."\\ \\-#,##0.00';
-  ws.getCell('I10').value=45.2; ws.getCell('I10').numFmt=moneyFmt; ws.getCell('I10').font={name:'Arial',size:14,bold:true};
-  ws.getCell('J10').value=45.2; ws.getCell('J10').numFmt=moneyFmt; ws.getCell('J10').font={name:'Arial',size:14,bold:true};
+  ws.getCell('I10').value=49.2; ws.getCell('I10').numFmt=moneyFmt; ws.getCell('I10').font={name:'Arial',size:14,bold:true};
+  ws.getCell('J10').value=49.2; ws.getCell('J10').numFmt=moneyFmt; ws.getCell('J10').font={name:'Arial',size:14,bold:true};
   ws.getCell('K10').value='Soles'; ws.getCell('K10').font={name:'Arial',size:14};
   ws.getRow(9).height = 38; ws.getRow(10).height = 18;
 
@@ -3222,8 +3222,8 @@ document.getElementById('btnVerMovilidad').addEventListener('click', ()=>{
           <td rowspan="2" style="${bG}">Total</td>
         </tr>
         <tr>
-          <td style="${bG}">Hasta S/45.20</td>
-          <td style="${bG}">Mas S/45.20</td>
+          <td style="${bG}">Hasta S/49.20</td>
+          <td style="${bG}">Mas S/49.20</td>
         </tr>
       </thead>
       <tbody>${filas}</tbody>
