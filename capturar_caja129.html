@@ -19,7 +19,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 // ── Auto-actualizacion: si el celular tiene una version vieja guardada, se recarga sola una vez ──
-const APP_VERSION_CAPTURA = '11';
+const APP_VERSION_CAPTURA = '12';
 window.addEventListener('error', (e)=>{
   try{
     const item = document.createElement('div');
@@ -157,9 +157,13 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
     <input type="file" id="inputCamara" accept="image/*" capture="environment">
     <input type="file" id="inputArchivo" accept="image/*,application/pdf">
 
+    <div class="nota" id="estadoRecorteAuto" style="display:none; text-align:center; font-weight:bold;">&#9986;&#65039; Recortando autom&aacute;ticamente...</div>
     <div class="preview" id="preview" style="display:none;">
       <img id="imgPreview" src="" alt="Vista previa">
       <div id="pdfPreview" style="display:none; padding:20px; text-align:center; background:#fff; border:1px solid #d5d9ea; border-radius:6px; font-family:monospace;">&#128196; PDF listo para enviar</div>
+      <div class="actions" id="filaAjustar" style="display:none;">
+        <button class="accion" id="btnAjustarManual" type="button" style="width:100%;">&#9986;&#65039; Ajustar a mano</button>
+      </div>
 
       <div id="bloqueAdjuntoExtra" style="display:none; margin-top:12px; padding:12px; background:#fff; border:1px dashed #9aa; border-radius:6px;">
         <div style="font-family:monospace; font-size:12px; margin-bottom:10px;">&#128206; Comprobante adicional (opcional, ej. recibo de taxi/app) &mdash; queda por separado</div>
@@ -173,6 +177,7 @@ const LOGO_SODEXO_B64_CAP = "iVBORw0KGgoAAAANSUhEUgAAAH4AAAAsCAMAAACUu/xGAAADAFB
           <img id="imgPreviewExtra" src="" alt="Adjunto extra" style="max-width:100%; max-height:150px; display:block; border-radius:4px;">
           <div id="pdfPreviewExtra" style="display:none; padding:10px; text-align:center; background:#f4f4fa; border-radius:4px; font-family:monospace; font-size:12px;">&#128196; PDF adjunto listo</div>
           <button class="accion" id="btnAgregarSegundaExtra" type="button" style="margin-top:6px; padding:6px 10px; font-size:12px; display:none;">&#10133; Agregar otra foto (ida/vuelta)</button>
+          <button class="accion" id="btnAjustarExtra" type="button" style="margin-top:6px; padding:6px 10px; font-size:12px; display:none;">&#9986;&#65039; Ajustar a mano</button>
           <button class="accion" id="btnQuitarExtra" style="margin-top:6px; padding:6px 10px; font-size:12px;">&#10060; Quitar adjunto</button>
         </div>
         <input type="file" id="inputSegundaExtra" accept="image/*" capture="environment" style="display:none;">
@@ -285,6 +290,8 @@ document.getElementById('btnVolverMenu').addEventListener('click', ()=>{
   preview.style.display = 'none';
   archivoActual = null;
   archivoExtra = null;
+  originalParaAjuste = null; extraOriginalParaAjuste = null;
+  document.getElementById('filaAjustar').style.display = 'none';
   const bloqueExtra = document.getElementById('bloqueAdjuntoExtra');
   if(bloqueExtra) bloqueExtra.style.display = 'none';
   tipoSeleccionado = null;
@@ -297,19 +304,176 @@ let cropperInstance = null;
 const overlayRecorte = document.getElementById('overlayRecorte');
 const imgParaRecortar = document.getElementById('imgParaRecortar');
 
-function manejarArchivoSeleccionado(file){
+// ── Recorte automatico: detecta el papel y, dentro del papel, el contenido (letras, QR, sellos) ──
+// Detecta el area util de un documento fotografiado: primero el papel (zona clara mas grande) y luego,
+// dentro del papel, el contenido (letras, QR, sellos). Devuelve {x,y,w,h} en fracciones 0..1, o null si no es confiable.
+function detectarRecorteAuto(data, w, h){
+  const n = w*h;
+  const L = new Uint8Array(n);
+  for(let i=0,p=0;i<n;i++,p+=4) L[i] = (data[p]*299 + data[p+1]*587 + data[p+2]*114)/1000;
+
+  // 1) Umbral de Otsu para separar papel (claro) de fondo (escritorio, teclado)
+  const hist = new Array(256).fill(0);
+  for(let i=0;i<n;i++) hist[L[i]]++;
+  let suma=0; for(let t=0;t<256;t++) suma += t*hist[t];
+  let sumB=0, wB=0, mejor=0, T=128;
+  for(let t=0;t<256;t++){
+    wB += hist[t]; if(!wB) continue;
+    const wF = n - wB; if(!wF) break;
+    sumB += t*hist[t];
+    const mB = sumB/wB, mF = (suma-sumB)/wF;
+    const varEntre = wB*wF*(mB-mF)*(mB-mF);
+    if(varEntre > mejor){ mejor = varEntre; T = t; }
+  }
+
+  // 2) Componente claro mas grande (relleno por pila, vecindad 4)
+  const etiqueta = new Int32Array(n);
+  const pila = new Int32Array(n);
+  let mejorId = 0, mejorArea = 0, id = 0;
+  for(let s=0;s<n;s++){
+    if(L[s] <= T || etiqueta[s]) continue;
+    id++; let sp=0, area=0; pila[sp++] = s; etiqueta[s] = id;
+    while(sp){
+      const p = pila[--sp]; area++;
+      const x = p % w, y = (p - x)/w;
+      if(x>0   && !etiqueta[p-1] && L[p-1]>T){ etiqueta[p-1]=id; pila[sp++]=p-1; }
+      if(x<w-1 && !etiqueta[p+1] && L[p+1]>T){ etiqueta[p+1]=id; pila[sp++]=p+1; }
+      if(y>0   && !etiqueta[p-w] && L[p-w]>T){ etiqueta[p-w]=id; pila[sp++]=p-w; }
+      if(y<h-1 && !etiqueta[p+w] && L[p+w]>T){ etiqueta[p+w]=id; pila[sp++]=p+w; }
+    }
+    if(area > mejorArea){ mejorArea = area; mejorId = id; }
+  }
+  if(mejorArea < n*0.12) return null;
+
+  // 3) Extension del papel por filas/columnas (rellena los huecos que dejan las letras) y brillo tipico del papel
+  const rmin = new Int32Array(h).fill(w), rmax = new Int32Array(h).fill(-1);
+  const cmin = new Int32Array(w).fill(h), cmax = new Int32Array(w).fill(-1);
+  const histPapel = new Array(256).fill(0);
+  let bx0=w, bx1=-1, by0=h, by1=-1;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const p = y*w+x;
+    if(etiqueta[p] !== mejorId) continue;
+    if(x<rmin[y]) rmin[y]=x; if(x>rmax[y]) rmax[y]=x;
+    if(y<cmin[x]) cmin[x]=y; if(y>cmax[x]) cmax[x]=y;
+    if(x<bx0) bx0=x; if(x>bx1) bx1=x; if(y<by0) by0=y; if(y>by1) by1=y;
+    histPapel[L[p]]++;
+  }
+  let acum=0, mediana=T;
+  for(let t=0;t<256;t++){ acum += histPapel[t]; if(acum >= mejorArea/2){ mediana = t; break; } }
+
+  // 4) Contenido (tinta): pixeles mas oscuros que el papel que los rodea (umbral LOCAL, tolera sombras y luz despareja),
+  //    sin tocar los bordes del papel (sombras del contorno)
+  const W1 = w+1;
+  const sumaL = new Float64Array((w+1)*(h+1)), sumaM = new Float64Array((w+1)*(h+1));
+  for(let y=0;y<h;y++){
+    let fl=0, fm=0;
+    for(let x=0;x<w;x++){
+      const dentro = (y>=cmin[x] && y<=cmax[x] && x>=rmin[y] && x<=rmax[y]) ? 1 : 0;
+      fl += dentro ? L[y*w+x] : 0; fm += dentro;
+      sumaL[(y+1)*W1+x+1] = sumaL[y*W1+x+1] + fl;
+      sumaM[(y+1)*W1+x+1] = sumaM[y*W1+x+1] + fm;
+    }
+  }
+  const R = Math.max(8, Math.round(0.10*Math.min(w,h)));
+  const e = Math.max(3, Math.round(0.025*Math.min(w,h)));
+  const colTinta = new Int32Array(w), filaTinta = new Int32Array(h);
+  let totalTinta = 0, areaUtil = 0;
+  for(let y=by0;y<=by1;y++){
+    // El borde de la IMAGEN no es borde del papel: solo se descartan las franjas de sombra junto a bordes interiores del papel
+    const xi = rmin[y]===0 ? 0 : rmin[y]+e, xf = rmax[y]===w-1 ? w-1 : rmax[y]-e;
+    for(let x=xi; x<=xf; x++){
+      if(y < (cmin[x]===0 ? 0 : cmin[x]+e) || y > (cmax[x]===h-1 ? h-1 : cmax[x]-e)) continue;
+      areaUtil++;
+      const xa=Math.max(0,x-R), xb=Math.min(w,x+R+1), ya=Math.max(0,y-R), yb=Math.min(h,y+R+1);
+      const sm = sumaM[yb*W1+xb]-sumaM[ya*W1+xb]-sumaM[yb*W1+xa]+sumaM[ya*W1+xa];
+      if(sm < 1) continue;
+      const media = (sumaL[yb*W1+xb]-sumaL[ya*W1+xb]-sumaL[yb*W1+xa]+sumaL[ya*W1+xa]) / sm;
+      const v = L[y*w+x];
+      if(v < media*0.84 && media - v > 14){ colTinta[x]++; filaTinta[y]++; totalTinta++; }
+    }
+  }
+  if(!areaUtil || totalTinta < areaUtil*0.003) return null;
+
+  // 5) Limites con percentiles (ignora motas sueltas) y margen
+  const cort = totalTinta*0.004;
+  function limites(arr, largo){
+    let a=0, ini=0, fin=largo-1;
+    for(let i=0;i<largo;i++){ a+=arr[i]; if(a>=cort){ ini=i; break; } }
+    a=0; for(let i=largo-1;i>=0;i--){ a+=arr[i]; if(a>=cort){ fin=i; break; } }
+    return [ini, fin];
+  }
+  let [x0,x1] = limites(colTinta, w), [y0,y1] = limites(filaTinta, h);
+  const mx = Math.max(4, Math.round((x1-x0)*0.03)), my = Math.max(4, Math.round((y1-y0)*0.03));
+  x0 = Math.max(bx0, x0-mx); x1 = Math.min(bx1, x1+mx);
+  y0 = Math.max(by0, y0-my); y1 = Math.min(by1, y1+my);
+  if(x1<=x0 || y1<=y0) return null;
+  if((x1-x0)*(y1-y0) < n*0.06) return null;
+  return { x: x0/w, y: y0/h, w: (x1-x0+1)/w, h: (y1-y0+1)/h };
+}
+
+
+// Tipos de documento que se recortan solos (Firma y Voucher de Banco siguen igual)
+const TIPOS_AUTO_RECORTE = ['factura','voucher_movilidad'];
+let originalParaAjuste = null;      // {file, rect} de la foto principal, para "Ajustar a mano"
+let extraOriginalParaAjuste = null; // idem para el comprobante adicional
+
+// Devuelve {file, rect} con la foto ya recortada, o null si no se detecto un documento de forma confiable
+async function recortarAutomatico(file){
+  const estado = document.getElementById('estadoRecorteAuto');
+  estado.style.display = 'block';
+  let url = null;
+  try{
+    url = URL.createObjectURL(file);
+    const img = await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    if(!nw || !nh) return null;
+    const esc = Math.min(1, 420/Math.max(nw,nh));
+    const cw = Math.max(1, Math.round(nw*esc)), ch = Math.max(1, Math.round(nh*esc));
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    const ctx = c.getContext('2d', { willReadFrequently:true });
+    ctx.drawImage(img, 0, 0, cw, ch);
+    const rect = detectarRecorteAuto(ctx.getImageData(0,0,cw,ch).data, cw, ch);
+    if(!rect) return null;
+    // Recorte a resolucion completa (lado mayor limitado a 2200px)
+    const sx = Math.round(rect.x*nw), sy = Math.round(rect.y*nh);
+    const sw = Math.max(1, Math.min(nw-sx, Math.round(rect.w*nw))), sh = Math.max(1, Math.min(nh-sy, Math.round(rect.h*nh)));
+    const lim = Math.min(1, 2200/Math.max(sw,sh));
+    const out = document.createElement('canvas'); out.width = Math.max(1,Math.round(sw*lim)); out.height = Math.max(1,Math.round(sh*lim));
+    out.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, out.width, out.height);
+    const blob = await new Promise(r=> out.toBlob(r, 'image/jpeg', 0.92));
+    if(!blob) return null;
+    return { file: new File([blob], 'recorte_auto.jpg', { type:'image/jpeg' }), rect };
+  } catch(e){
+    return null; // ante cualquier falla se usa el editor manual de siempre
+  } finally {
+    if(url) URL.revokeObjectURL(url);
+    estado.style.display = 'none';
+  }
+}
+
+async function manejarArchivoSeleccionado(file){
   if(!file) return;
   if(file.type === 'application/pdf'){
     // Los PDF no pasan por el editor de recorte
+    originalParaAjuste = null;
     continuarConArchivo(file);
     return;
   }
+  if(TIPOS_AUTO_RECORTE.indexOf(tipoSeleccionado) >= 0){
+    const auto = await recortarAutomatico(file);
+    if(auto){
+      originalParaAjuste = { file, rect: auto.rect };
+      continuarConArchivo(auto.file); // ya aparece recortada; "Ajustar a mano" abre el editor sobre la original
+      return;
+    }
+  }
+  originalParaAjuste = null;
   abrirEditorRecorte(file, continuarConArchivo);
 }
 
 // Editor de recorte generico: abre el editor sobre "file" y llama a onListo(archivoFinal) cuando termina
 // (ya sea recortado o completo). Reutilizable para cualquier foto de la app.
-function abrirEditorRecorte(file, onListo){
+function abrirEditorRecorte(file, onListo, rectInicial){
   overlayRecorte._callbackListo = onListo;
   rotacionAplicada = 0;
   // Si la libreria de recorte no cargo (red lenta, CDN bloqueado), se usa la foto completa sin recorte
@@ -330,6 +494,14 @@ function abrirEditorRecorte(file, onListo){
       movable: true,
       zoomable: true,
       scalable: false,
+      ready(){
+        // Al ajustar a mano, el recuadro arranca donde lo dejo el recorte automatico
+        if(rectInicial && imgParaRecortar.cropper){
+          const d = imgParaRecortar.cropper.getImageData();
+          imgParaRecortar.cropper.setData({ x: rectInicial.x*d.naturalWidth, y: rectInicial.y*d.naturalHeight,
+            width: rectInicial.w*d.naturalWidth, height: rectInicial.h*d.naturalHeight });
+        }
+      },
     });
   } catch(err){
     // Si el editor falla al iniciar, no se deja al usuario atascado: se usa la foto completa
@@ -346,7 +518,13 @@ function continuarConArchivo(file){
   imgPreview.src = URL.createObjectURL(file);
   preview.style.display = 'block';
   document.getElementById('bloqueAdjuntoExtra').style.display = (tipoSeleccionado === 'voucher_movilidad') ? 'block' : 'none';
+  document.getElementById('filaAjustar').style.display = originalParaAjuste ? 'flex' : 'none';
 }
+
+document.getElementById('btnAjustarManual').addEventListener('click', ()=>{
+  if(!originalParaAjuste) return;
+  abrirEditorRecorte(originalParaAjuste.file, continuarConArchivo, originalParaAjuste.rect);
+});
 
 let rotacionAplicada = 0; // grados rotados en la sesion de recorte actual (solo informativo)
 
@@ -453,16 +631,30 @@ function mostrarPreviewExtra(file){
     btnAgregarSegunda.style.display = 'block';
   }
   previewExtra.style.display = 'block';
+  document.getElementById('btnAjustarExtra').style.display = (extraOriginalParaAjuste && file.type !== 'application/pdf') ? 'inline-block' : 'none';
 }
 
-function manejarArchivoExtraSeleccionado(file){
+async function manejarArchivoExtraSeleccionado(file){
   if(!file) return;
   if(file.type === 'application/pdf'){
+    extraOriginalParaAjuste = null;
     mostrarPreviewExtra(file);
     return;
   }
+  const auto = await recortarAutomatico(file);
+  if(auto){
+    extraOriginalParaAjuste = { file, rect: auto.rect };
+    mostrarPreviewExtra(auto.file);
+    return;
+  }
+  extraOriginalParaAjuste = null;
   abrirEditorRecorte(file, mostrarPreviewExtra);
 }
+
+document.getElementById('btnAjustarExtra').addEventListener('click', ()=>{
+  if(!extraOriginalParaAjuste) return;
+  abrirEditorRecorte(extraOriginalParaAjuste.file, mostrarPreviewExtra, extraOriginalParaAjuste.rect);
+});
 
 document.getElementById('btnAbrirCamaraExtra').addEventListener('click', ()=> document.getElementById('inputCamaraExtra').click());
 document.getElementById('btnAbrirArchivosExtra').addEventListener('click', ()=> document.getElementById('inputArchivoExtra').click());
@@ -477,6 +669,9 @@ async function combinarConSegundaFoto(segundaFotoFinal){
     archivoExtra = combinado;
     document.getElementById('imgPreviewExtra').src = URL.createObjectURL(combinado);
     btnAgregarSegunda.style.display = 'none'; // ya se combino, no se puede agregar una tercera
+    // "Ajustar a mano" sobre el resultado combinado (sin recuadro previo)
+    extraOriginalParaAjuste = { file: combinado, rect: null };
+    document.getElementById('btnAjustarExtra').style.display = 'inline-block';
   } catch(err){
     alert('No se pudo combinar las fotos: ' + err.message);
   }
@@ -488,11 +683,15 @@ document.getElementById('inputSegundaExtra').addEventListener('change', async (e
   const segundaFoto = e.target.files[0];
   if(!segundaFoto || !archivoExtra) return;
   e.target.value = '';
-  abrirEditorRecorte(segundaFoto, combinarConSegundaFoto);
+  const auto = await recortarAutomatico(segundaFoto);
+  if(auto) combinarConSegundaFoto(auto.file);
+  else abrirEditorRecorte(segundaFoto, combinarConSegundaFoto);
 });
 
 document.getElementById('btnQuitarExtra').addEventListener('click', ()=>{
   archivoExtra = null;
+  extraOriginalParaAjuste = null;
+  document.getElementById('btnAjustarExtra').style.display = 'none';
   document.getElementById('previewExtra').style.display = 'none';
   document.getElementById('inputCamaraExtra').value = '';
   document.getElementById('inputArchivoExtra').value = '';
@@ -502,6 +701,9 @@ document.getElementById('btnQuitarExtra').addEventListener('click', ()=>{
 document.getElementById('btnDescartar').addEventListener('click', ()=>{
   archivoActual = null;
   archivoExtra = null;
+  originalParaAjuste = null; extraOriginalParaAjuste = null;
+  document.getElementById('filaAjustar').style.display = 'none';
+  document.getElementById('btnAjustarExtra').style.display = 'none';
   preview.style.display = 'none';
   document.getElementById('bloqueAdjuntoExtra').style.display = 'none';
   document.getElementById('previewExtra').style.display = 'none';
@@ -622,6 +824,9 @@ document.getElementById('btnGuardar').addEventListener('click', async ()=>{
     btn.disabled = false; btn.textContent = 'Enviar a la laptop';
     archivoActual = null;
     archivoExtra = null;
+    originalParaAjuste = null; extraOriginalParaAjuste = null;
+    document.getElementById('filaAjustar').style.display = 'none';
+    document.getElementById('btnAjustarExtra').style.display = 'none';
     preview.style.display = 'none';
     document.getElementById('bloqueAdjuntoExtra').style.display = 'none';
     document.getElementById('previewExtra').style.display = 'none';
