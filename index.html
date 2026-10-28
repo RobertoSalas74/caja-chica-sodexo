@@ -192,8 +192,9 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnAbrirCaja" style="padding:6px 12px; font-size:11px;">&#128188; Abrir Caja</button>
         <button id="btnCerrarCaja" class="secondary" style="padding:6px 12px; font-size:11px;" disabled>&#128274; Cerrar Caja</button>
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
+        <button id="btnPapelera" class="secondary" style="padding:6px 12px; font-size:11px;">&#128465; Eliminados</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.63</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.64</div>
     </div>
   </header>
 
@@ -1639,9 +1640,23 @@ async function eliminarRegistro(modo, i){
   if(!confirm(`\u00bfEliminar definitivamente este registro?\n\n${r.descripcion||''} \u2014 ${fmt(r.total)}${aviso}\n\nSe borra tambi\u00e9n de la base de datos y no se puede deshacer.`)) return;
   if(r.id){
     const tabla = modo==='factura' ? 'comprobantes' : 'vales_movilidad';
-    // .select() devuelve las filas borradas: si no borro ninguna (sin permiso o ya no existia) no se da por eliminado
+    // 1) Copia de seguridad completa en la papelera: si no se puede guardar, NO se borra nada
+    const { data: fila, error: eF } = await supabaseClient.from(tabla).select('*').eq('id', r.id).single();
+    if(eF || !fila){
+      alert('No se pudo leer el registro para guardar su copia de seguridad' + (eF ? ': ' + eF.message : '') + '.\n\nEl registro NO se borr\u00f3.');
+      return;
+    }
+    const resumen = tabla==='comprobantes' ? `${fila.documento||'s/n'} \u00b7 ${fila.descripcion||''}` : `${fila.solicitante||''} \u00b7 ${fila.motivo||''}`;
+    const { data: copia, error: eB } = await supabaseClient.from('papelera')
+      .insert({ tabla, registro: fila, caja_id: fila.caja_id, caja_numero: String(cajaActiva||''), resumen }).select('id').single();
+    if(eB || !copia){
+      alert('No se pudo guardar la copia de seguridad en la papelera' + (eB ? ': ' + eB.message : '') + '.\n\nEl registro NO se borr\u00f3.');
+      return;
+    }
+    // 2) Borrar. .select() devuelve las filas borradas: si no borro ninguna (sin permiso o ya no existia) no se da por eliminado
     const { data, error } = await supabaseClient.from(tabla).delete().eq('id', r.id).select('id');
     if(error || !data || data.length === 0){
+      await supabaseClient.from('papelera').update({ anulada: true }).eq('id', copia.id); // el borrado no ocurrio: la copia no cuenta
       alert('No se pudo eliminar de la base de datos' + (error ? ': ' + error.message : '') + '.\n\nEl registro NO se borr\u00f3.');
       return;
     }
@@ -1876,6 +1891,86 @@ function verEvidenciaHistorial(tabla, i, cual){
 }
 
 document.getElementById('btnHistorialCajas').addEventListener('click', abrirHistorialCajas);
+
+// ── Papelera: lo eliminado (facturas, vales y personas) se puede ver y restaurar ──
+const P_TH = 'text-align:left; padding:6px 8px; background:#f2f2f2; border:1px solid #ccc; font-family:Arial; font-size:11px;';
+const P_TD = 'padding:5px 8px; border:1px solid #ddd; font-family:Arial; font-size:12px; vertical-align:top;';
+let papeleraItems = [];
+let restaurandoPapelera = false;
+function pEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const P_TIPO = { comprobantes:'Factura', vales_movilidad:'Vale de movilidad', firmas_personas:'Persona' };
+
+async function abrirPapelera(){
+  abrirModal('Eliminados (papelera)', '<div style="padding:20px; font-family:Arial;">Cargando...</div>');
+  const { data, error } = await supabaseClient.from('papelera').select('*').eq('anulada', false).order('eliminado_en', { ascending:false }).limit(300);
+  if(error){ modalContenido.innerHTML = '<div style="padding:20px; font-family:Arial; color:#c00;">No se pudo cargar la papelera: ' + pEsc(error.message) + '</div>'; return; }
+  papeleraItems = data || [];
+  if(!papeleraItems.length){
+    modalContenido.innerHTML = '<div style="padding:20px; font-family:Arial; font-size:13px;">La papelera est\u00e1 vac\u00eda.<br><br>Todo lo que elimines desde ahora (facturas, vales y personas) quedar\u00e1 aqu\u00ed, y podr\u00e1s restaurarlo con todos sus datos y su foto.</div>';
+    return;
+  }
+  const filas = papeleraItems.map((it,i)=>{
+    const reg = it.registro || {};
+    const importe = reg.importe!=null ? 'S/ ' + (parseFloat(reg.importe)||0).toFixed(2) : '';
+    const cuando = new Date(it.eliminado_en).toLocaleString('es-PE', { dateStyle:'short', timeStyle:'short' });
+    const foto = reg.evidencia_url ? `<a href="${pEsc(reg.evidencia_url)}" target="_blank" rel="noopener" style="font-size:11px; margin-right:6px;">Ver foto</a>` : '';
+    const accion = it.restaurado_en ? '<span style="color:#1b7a3a;">Restaurado</span>' : `<button type="button" style="padding:3px 10px; font-size:11px; cursor:pointer;" onclick="restaurarDePapelera(${i})">&#8630; Restaurar</button>`;
+    return `<tr>
+      <td style="${P_TD}">${pEsc(cuando)}</td><td style="${P_TD}">${pEsc(P_TIPO[it.tabla]||it.tabla)}</td>
+      <td style="${P_TD}">${it.caja_numero ? 'Caja ' + pEsc(it.caja_numero) : ''}</td>
+      <td style="${P_TD}">${pEsc(reg.fecha||'')} ${pEsc(it.resumen||'')}</td>
+      <td style="${P_TD} text-align:right;">${importe}</td><td style="${P_TD}">${foto}${accion}</td></tr>`;
+  }).join('');
+  modalContenido.innerHTML = `<div style="padding:16px 20px;">
+    <div style="font-family:Arial; font-size:12px; color:#555; margin-bottom:8px;">Lo que eliminas se guarda aqu\u00ed con todos sus datos. \u201cRestaurar\u201d lo devuelve a su caja con su foto.</div>
+    <table style="border-collapse:collapse; width:100%;"><thead><tr>
+      <th style="${P_TH}">Eliminado</th><th style="${P_TH}">Tipo</th><th style="${P_TH}">Caja</th><th style="${P_TH}">Detalle</th><th style="${P_TH} text-align:right;">Importe</th><th style="${P_TH}"></th>
+    </tr></thead><tbody>${filas}</tbody></table></div>`;
+}
+
+async function restaurarDePapelera(i){
+  if(restaurandoPapelera) return; // evita doble clic
+  const it = papeleraItems[i]; if(!it) return;
+  restaurandoPapelera = true;
+  try{
+    // releer: puede haberse restaurado desde otra ventana
+    const { data: act, error: e0 } = await supabaseClient.from('papelera').select('restaurado_en').eq('id', it.id).single();
+    if(e0) throw e0;
+    if(act && act.restaurado_en){ alert('Este registro ya fue restaurado.'); await abrirPapelera(); return; }
+    const reg = it.registro;
+    if(it.tabla === 'firmas_personas'){
+      const { error } = await supabaseClient.from('firmas_personas').upsert(reg);
+      if(error) throw error;
+    } else {
+      // si su caja ya esta cerrada, avisar: se restaura ahi, pero el monto de cierre ya enviado no cambia
+      let enCajaCerrada = false;
+      if(reg.caja_id){
+        const { data: cj } = await supabaseClient.from('cajas').select('numero,estado').eq('id', reg.caja_id).single();
+        if(cj && cj.estado === 'cerrada'){
+          enCajaCerrada = true;
+          if(!confirm('Este registro pertenec\u00eda a la caja ' + cj.numero + ', que ya est\u00e1 cerrada.\n\nSe restaurar\u00e1 en esa caja, pero su monto de cierre ya enviado no cambia.\n\n\u00bfRestaurar de todas formas?')) return;
+        }
+      }
+      const { data: ya, error: eY } = await supabaseClient.from(it.tabla).select('id').eq('id', reg.id);
+      if(eY) throw eY;
+      if(!ya || ya.length === 0){
+        const { error } = await supabaseClient.from(it.tabla).insert(reg);
+        if(error) throw error;
+      }
+    }
+    const { error: eM } = await supabaseClient.from('papelera').update({ restaurado_en: new Date().toISOString() }).eq('id', it.id);
+    if(eM) throw eM;
+    // refrescar lo que se ve en la app
+    if(it.tabla === 'firmas_personas'){ await cargarFirmasPermanentes(); if(typeof renderPersonasAdmin === 'function') renderPersonasAdmin(); }
+    else if(reg.caja_id && reg.caja_id === cajaIdActual){ await restaurarCajaDesdeSupabase(); }
+    await abrirPapelera();
+  } catch(e){
+    alert('No se pudo restaurar: ' + e.message + '\n\nPuedes volver a intentarlo; no se duplica nada.');
+  } finally {
+    restaurandoPapelera = false;
+  }
+}
+document.getElementById('btnPapelera').addEventListener('click', abrirPapelera);
 
 document.getElementById('btnVaciar').addEventListener('click', ()=>{
   if(confirm('\u00bfSeguro que quieres borrar todos los registros de esta sesi\u00f3n?')){
@@ -3635,6 +3730,13 @@ async function eliminarPersona(nombre){
   const { datos } = listasActivas();
   const listaNombres = cajaTipoActiva==='foods' ? SOLICITANTES_FOODS : SOLICITANTES;
   try{
+    // Copia de seguridad en la papelera (nombre, DNI y firma) antes de borrar; si falla, no se borra
+    const { data: filaP, error: eP } = await supabaseClient.from('firmas_personas').select('*').eq('nombre', nombre);
+    if(eP) throw eP;
+    if(filaP && filaP.length){
+      const { error: eB } = await supabaseClient.from('papelera').insert({ tabla: 'firmas_personas', registro: filaP[0], resumen: nombre });
+      if(eB) throw new Error('No se pudo guardar la copia de seguridad: ' + eB.message);
+    }
     await supabaseClient.from('firmas_personas').delete().eq('nombre', nombre);
     delete datos[nombre];
     const idxS = listaNombres.indexOf(nombre);
