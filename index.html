@@ -194,7 +194,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
         <button id="btnPapelera" class="secondary" style="padding:6px 12px; font-size:11px;">&#128465; Eliminados</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.65</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.66</div>
     </div>
   </header>
 
@@ -1634,8 +1634,8 @@ async function eliminarRegistro(modo, i){
   const lista = modo==='factura' ? registros : registrosMov;
   const r = lista[i];
   if(!r) return;
-  const aviso = r.origenCaja ? `\n\nEste registro vino de la caja ${r.origenCaja}; al eliminarlo no volver\u00e1 a esa caja.` : '';
-  if(!confirm(`\u00bfEliminar definitivamente este registro?\n\n${r.descripcion||''} \u2014 ${fmt(r.total)}${aviso}\n\nSe borra tambi\u00e9n de la base de datos y no se puede deshacer.`)) return;
+  const aviso = r.origenCaja ? `\n\nEste registro vino de la caja ${r.origenCaja}; podr\u00e1s restaurarlo desde \u201cEliminados\u201d.` : '';
+  if(!confirm(`\u00bfEliminar este registro?\n\n${r.descripcion||''} \u2014 ${fmt(r.total)}${aviso}\n\nSe mover\u00e1 a \u201cEliminados\u201d y podr\u00e1s restaurarlo desde ah\u00ed.`)) return;
   if(r.id){
     const tabla = modo==='factura' ? 'comprobantes' : 'vales_movilidad';
     // 1) Copia de seguridad completa en la papelera: si no se puede guardar, NO se borra nada
@@ -3715,7 +3715,7 @@ async function guardarPersona(nombreOriginal, idSafe){
 }
 
 async function eliminarPersona(nombre){
-  if(!confirm(`\u00bfEliminar a ${nombre}? Esto la quita de la base de datos permanente. Si es una de las personas originales, podr\u00eda volver a aparecer al recargar la p\u00e1gina (est\u00e1 tambi\u00e9n guardada en el c\u00f3digo base).`)) return;
+  if(!confirm(`\u00bfEliminar a ${nombre}? Se guardar\u00e1 una copia en \u201cEliminados\u201d (con su DNI y su firma) y podr\u00e1s restaurarla desde ah\u00ed. Si es una de las personas originales, podr\u00eda volver a aparecer al recargar la p\u00e1gina (est\u00e1 tambi\u00e9n guardada en el c\u00f3digo base).`)) return;
   const { datos } = listasActivas();
   const listaNombres = cajaTipoActiva==='foods' ? SOLICITANTES_FOODS : SOLICITANTES;
   try{
