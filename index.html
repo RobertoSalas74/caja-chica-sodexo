@@ -194,7 +194,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
         <button id="btnPapelera" class="secondary" style="padding:6px 12px; font-size:11px;">&#128465; Eliminados</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.64</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.65</div>
     </div>
   </header>
 
@@ -586,7 +586,6 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   <div class="actions">
     <button class="download" id="btnDescargarOficial" disabled>&#128190; Descargar Archivo Oficial</button>
     <button class="secondary" id="btnDescargarRespaldo" disabled>&#128194; Descargar Respaldo (Ingreso)</button>
-    <button class="secondary" id="btnVaciar" disabled>Vaciar todos los registros</button>
   </div>
 
   <div class="footer-note">
@@ -1299,7 +1298,6 @@ function renderTabla(){
   count.textContent = totalRegistros + (totalRegistros===1?' registro':' registros');
   document.getElementById('btnDescargarOficial').disabled = totalRegistros===0;
   document.getElementById('btnDescargarRespaldo').disabled = registros.length===0;
-  document.getElementById('btnVaciar').disabled = totalRegistros===0;
 
   if(!filtroTablaModo){
     wrap.innerHTML = '';
@@ -1971,15 +1969,6 @@ async function restaurarDePapelera(i){
   }
 }
 document.getElementById('btnPapelera').addEventListener('click', abrirPapelera);
-
-document.getElementById('btnVaciar').addEventListener('click', ()=>{
-  if(confirm('\u00bfSeguro que quieres borrar todos los registros de esta sesi\u00f3n?')){
-    registros = [];
-    registrosMov = [];
-    renderTabla();
-    guardarEnArchivoConectado();
-  }
-});
 
 // Estilo identico al archivo real de Sodexo: encabezado morado, texto blanco negrita
 const ESTILO_HEADER = {
