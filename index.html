@@ -194,7 +194,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
         <button id="btnPapelera" class="secondary" style="padding:6px 12px; font-size:11px;">&#128465; Eliminados</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.66</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.67</div>
     </div>
   </header>
 
@@ -815,6 +815,13 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async
     }).select('id').single();
     if(error) throw error;
     cajaIdActual = data.id;
+    // Vales provisionales sin liquidar de cajas cerradas pasan a esta caja (no se reembolsan, pero siguen pendientes de liquidar)
+    try{
+      const n = await trasladarProvisionalesPendientes(cajaIdActual, cajaTipoActiva);
+      if(n > 0) await restaurarCajaDesdeSupabase();
+    } catch(e2){
+      alert('La caja se abri\u00f3, pero no se pudieron traer los vales provisionales pendientes de la caja anterior: ' + e2.message + '\n\nSin ellos el Arqueo no cuadrar\u00e1. Cierra y vuelve a abrir la app para reintentarlo.');
+    }
   } catch(e){
     cajaIdActual = null;
     console.warn('No se pudo crear la caja en Supabase, seguira solo en memoria:', e.message);
@@ -822,16 +829,45 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async
   await verificarCajasAbiertas();
 });
 
+// Copia a la caja nueva los vales provisionales sin liquidar de las cajas ya cerradas (mismo tipo). Idempotente:
+// si ya existe una copia (origen_id) no se duplica. El original queda en su caja cerrada como historial.
+async function trasladarProvisionalesPendientes(cajaNuevaId, tipoCaja){
+  const { data: cerradas, error: eC } = await supabaseClient.from('cajas').select('id,numero').eq('tipo', tipoCaja).eq('estado','cerrada');
+  if(eC) throw eC;
+  let n = 0;
+  for(const c of (cerradas||[])){
+    const { data: provs, error: eP } = await supabaseClient.from('comprobantes').select('*').eq('caja_id', c.id).eq('tipo','Vale Provisional');
+    if(eP) throw eP;
+    for(const p of (provs||[])){
+      if(p.liquidado || p.rechazada) continue;
+      const { data: ya, error: eY } = await supabaseClient.from('comprobantes').select('id').eq('origen_id', p.id);
+      if(eY) throw eY;
+      if(ya && ya.length) continue; // ya paso a otra caja
+      const { id, caja_id, created_at, rechazada, rechazada_a_caja, origen_caja_numero, origen_id, liquidado, fecha_liquidacion, ...resto } = p;
+      const { error: eI } = await supabaseClient.from('comprobantes').insert({ ...resto, caja_id: cajaNuevaId, origen_caja_numero: String(c.numero), origen_id: p.id });
+      if(eI) throw eI;
+      n++;
+    }
+  }
+  return n;
+}
+
 // Historial de cajas cerradas: {numero, monto, fecha} — alimenta la Seccion 4 del Arqueo
 let cajasCerradas = [];
 
 btnCerrarCaja.addEventListener('click', async ()=>{
   if(!cajaActiva) return;
-  const totalComprobantes = registros.reduce((s,r)=> s + ((r.tipo==='Vale Provisional' && r.liquidado) ? 0 : r.total), 0);
+  // Los vales provisionales no se reembolsan (son prestamos): no cuentan en el monto a reembolsar
+  const totalComprobantes = registros.reduce((s,r)=> s + (r.tipo==='Vale Provisional' ? 0 : r.total), 0);
   const totalVales = registrosMov.reduce((s,r)=>s+r.total,0);
   const montoCierre = totalComprobantes + totalVales;
+  const provisionalesSinLiquidar = registros.filter(r=> r.tipo==='Vale Provisional' && !r.liquidado);
+  const totalProvisionales = provisionalesSinLiquidar.reduce((s,r)=>s+r.total,0);
+  const avisoProvisionales = provisionalesSinLiquidar.length
+    ? `\n\nVales provisionales sin liquidar (NO se reembolsan): S/ ${totalProvisionales.toFixed(2)}. Pasar\u00e1n solos a la pr\u00f3xima caja que abras.`
+    : '';
 
-  if(confirm(`¿Confirmas que quieres cerrar la Caja ${cajaActiva}?\n\nMonto a reembolsar (Comprobantes + Vales): S/ ${montoCierre.toFixed(2)}\n\nEsto guardará el resumen y limpiará el detalle día a día. La próxima caja que abras sugerirá el número ${parseInt(cajaActiva)+1}.`)){
+  if(confirm(`¿Confirmas que quieres cerrar la Caja ${cajaActiva}?\n\nMonto a reembolsar (Comprobantes + Vales): S/ ${montoCierre.toFixed(2)}${avisoProvisionales}\n\nEsto guardará el resumen y limpiará el detalle día a día. La próxima caja que abras sugerirá el número ${parseInt(cajaActiva)+1}.`)){
     // Descargar el historial de Banco en Vivo de esta caja antes de limpiarlo (mientras cajaActiva aun tiene el numero correcto)
     if(movimientosBanco.length>0 || saldoInicialBanco!==0) descargarHistorialBancoCSV();
 
@@ -1816,7 +1852,7 @@ async function verDetalleCajaCerrada(id){
   historialDetalle = { comp: rcomp.data||[], vales: rvales.data||[], banco: rbanco.data||[] };
   const { comp, vales, banco } = historialDetalle;
 
-  const totalComp = comp.reduce((s,r)=>s+(parseFloat(r.importe)||0),0);
+  const totalComp = comp.filter(r=>r.tipo!=='Vale Provisional').reduce((s,r)=>s+(parseFloat(r.importe)||0),0); // sin provisionales (no se reembolsan)
   const totalVales = vales.reduce((s,r)=>s+(parseFloat(r.importe)||0),0);
   modalTitulo.textContent = (c.tipo==='foods'?'FOODS':'MANTENIMIENTO') + ' \u2014 CAJA ' + c.numero + ' (cerrada)';
 
@@ -3256,7 +3292,8 @@ document.getElementById('btnVerReclasificacion').addEventListener('click', ()=>{
       <td style="${estiloTD}">${r.cuenta||''}</td><td style="${estiloTD}">${r.serviceCat||''}</td>
     </tr>`;
   }).join('');
-  const totalReembolsar = registros.filter(r=>r.tipo!=='Vale Provisional').reduce((s,r)=>s+r.total,0);
+  // Igual que el Excel: las 4 filas de Planilla (movilidad) + facturas, sin vales provisionales
+  const totalReembolsar = filasResumen.reduce((s,[,m])=>s+m,0) + registros.filter(r=>r.tipo!=='Vale Provisional').reduce((s,r)=>s+r.total,0);
   const html = `
     <div style="padding:16px 20px 0;"><b style="font-family:Arial;">SODEXO PERU SAC</b><br><span style="font-family:Arial; font-size:12px;">RUC 20414766308</span>
     <div style="font-family:Arial; font-weight:bold; margin-top:8px; font-size:14px;">PLANILLA DE RECLASIFICACION DE CAJA CHICA</div></div>
@@ -3402,7 +3439,7 @@ async function registrarReembolso(i){
   if(err){ modalContenido.innerHTML = '<div style="padding:20px; font-family:Arial; color:#c00;">No se pudo cargar la caja: ' + rEsc(err.message) + '</div>'; return; }
   if(rcaja.data && rcaja.data.reembolsada){ modalContenido.innerHTML = '<div style="padding:20px; font-family:Arial;">Esta caja ya fue marcada como reembolsada.</div>'; return; }
   // Solo lo que form\u00f3 parte del monto pedido
-  const comp = (rc.data||[]).filter(r=> !r.rechazada && !(r.tipo==='Vale Provisional' && r.liquidado));
+  const comp = (rc.data||[]).filter(r=> !r.rechazada && r.tipo!=='Vale Provisional'); // los provisionales no se reembolsan
   const vales = (rv.data||[]).filter(r=> !r.rechazada);
   reembolsoCtx = { caja: c, comp, vales };
 
