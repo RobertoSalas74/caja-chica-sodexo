@@ -194,7 +194,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
         <button id="btnPapelera" class="secondary" style="padding:6px 12px; font-size:11px;">&#128465; Eliminados</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.69</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.70</div>
     </div>
   </header>
 
@@ -323,6 +323,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnEstablecerSaldoInicial" style="width:100%;">Establecer saldo inicial</button>
       </div>
     </div>
+    <div id="saldoInicialNota" style="display:none; font-size:12px; font-weight:bold; margin:-6px 0 14px;"></div>
 
     <div style="background:var(--ok-soft); border:1px solid var(--ok); border-radius:8px; padding:24px; text-align:center; margin-bottom:16px;">
       <div style="font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:.06em; font-weight:bold; color:var(--ok);">Saldo Real Actual</div>
@@ -682,7 +683,7 @@ async function cambiarTipoCajaActiva(nuevoTipo){
   actualizarBotonesTipoCaja();
   // Limpiar todo el estado en memoria antes de cargar el de la otra caja
   cajaActiva = null; cajaIdActual = null; ultimaCajaCerrada = null;
-  registros = []; registrosMov = []; movimientosBanco = []; saldoInicialBanco = 0; cajasCerradas = [];
+  registros = []; registrosMov = []; movimientosBanco = []; saldoInicialBanco = 0; saldoInicialOrigen = null; cajasCerradas = [];
   fondoFijoActivo = 8000;
   fotoSaldoBanco = null; actualizarEstadoFotoSaldo();
   actualizarBadgeCaja();
@@ -793,7 +794,7 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async
   if(tipoAAbrir !== cajaTipoActiva){
     cajaTipoActiva = tipoAAbrir;
     actualizarBotonesTipoCaja();
-    registros = []; registrosMov = []; movimientosBanco = []; saldoInicialBanco = 0; cajasCerradas = [];
+    registros = []; registrosMov = []; movimientosBanco = []; saldoInicialBanco = 0; saldoInicialOrigen = null; cajasCerradas = [];
     repoblarSelectsPersonas();
     if(typeof renderPersonasAdmin === 'function') renderPersonasAdmin();
   }
@@ -815,6 +816,18 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async
     }).select('id').single();
     if(error) throw error;
     cajaIdActual = data.id;
+    // Saldo inicial automatico: el saldo final de la ultima caja cerrada del mismo tipo (editable; el BCP manda)
+    try{
+      const pre = await prellenarSaldoInicial(cajaIdActual, cajaTipoActiva);
+      if(pre){
+        renderBancoEnVivo();
+        if(Math.abs(parseFloat(pre.diferenciaCierre)||0) >= 0.005){
+          alert('La caja ' + pre.numero + ' cerr\u00f3 con una diferencia de Arqueo de S/ ' + parseFloat(pre.diferenciaCierre).toFixed(2) + '.\n\nEsta caja nueva hereda ese descuadre: rev\u00edsalo antes de enviar su Arqueo.');
+        }
+      }
+    } catch(e3){
+      console.warn('No se pudo calcular el saldo inicial automatico:', e3.message);
+    }
     // Vales provisionales sin liquidar de cajas cerradas pasan a esta caja (no se reembolsan, pero siguen pendientes de liquidar)
     try{
       const n = await trasladarProvisionalesPendientes(cajaIdActual, cajaTipoActiva);
@@ -828,6 +841,31 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async
   }
   await verificarCajasAbiertas();
 });
+
+// Toma el saldo final de la ultima caja cerrada del mismo tipo y lo deja como saldo inicial de la caja nueva.
+// Si esa caja es antigua y no guardo su saldo final, se calcula desde sus movimientos de banco.
+async function prellenarSaldoInicial(cajaNuevaId, tipoCaja){
+  const { data: cerradas, error } = await supabaseClient.from('cajas').select('*').eq('tipo', tipoCaja).eq('estado','cerrada');
+  if(error) throw error;
+  if(!cerradas || !cerradas.length) return null;
+  const ultima = cerradas.slice().sort((a,b)=> String(b.fecha_cierre||'').localeCompare(String(a.fecha_cierre||'')) || (parseInt(b.numero)||0) - (parseInt(a.numero)||0))[0];
+  let monto;
+  if(ultima.saldo_final_banco !== null && ultima.saldo_final_banco !== undefined){
+    monto = parseFloat(ultima.saldo_final_banco);
+  } else {
+    const { data: movs, error: eM } = await supabaseClient.from('movimientos_banco').select('tipo,monto').eq('caja_id', ultima.id);
+    if(eM) throw eM;
+    const ing = (movs||[]).filter(m=>m.tipo==='ingreso').reduce((t,m)=>t+(parseFloat(m.monto)||0),0);
+    const egr = (movs||[]).filter(m=>m.tipo==='egreso').reduce((t,m)=>t+(parseFloat(m.monto)||0),0);
+    monto = (parseFloat(ultima.saldo_inicial_banco)||0) + ing - egr;
+  }
+  monto = Math.round(monto * 100) / 100;
+  const { error: eU } = await supabaseClient.from('cajas').update({ saldo_inicial_banco: monto, saldo_inicial_origen: String(ultima.numero), saldo_inicial_sugerido: monto }).eq('id', cajaNuevaId);
+  if(eU) throw eU;
+  saldoInicialBanco = monto;
+  saldoInicialOrigen = { numero: String(ultima.numero), monto };
+  return { numero: ultima.numero, monto, diferenciaCierre: ultima.diferencia_cierre };
+}
 
 // Copia a la caja nueva los vales provisionales sin liquidar de las cajas ya cerradas (mismo tipo). Idempotente:
 // si ya existe una copia (origen_id) no se duplica. El original queda en su caja cerrada como historial.
@@ -882,10 +920,13 @@ btnCerrarCaja.addEventListener('click', async ()=>{
     // Descargar el historial de Banco en Vivo de esta caja antes de limpiarlo (mientras cajaActiva aun tiene el numero correcto)
     if(movimientosBanco.length>0 || saldoInicialBanco!==0) descargarHistorialBancoCSV();
 
+    const saldoFinalBanco = Math.round(calcularSaldoActualBanco() * 100) / 100; // lo que queda en el banco al cerrar
+    const diferenciaCierre = diferenciaArqueoActual();                           // con que diferencia de Arqueo cierra
     if(cajaIdActual){
       try{
         await supabaseClient.from('cajas').update({
-          estado: 'cerrada', fecha_cierre: new Date().toISOString().slice(0,10), monto_cierre: montoCierre
+          estado: 'cerrada', fecha_cierre: new Date().toISOString().slice(0,10), monto_cierre: montoCierre,
+          saldo_final_banco: saldoFinalBanco, diferencia_cierre: diferenciaCierre
         }).eq('id', cajaIdActual);
       } catch(e){ console.warn('No se pudo marcar la caja como cerrada en Supabase:', e.message); }
     }
@@ -902,6 +943,7 @@ btnCerrarCaja.addEventListener('click', async ()=>{
     registros = [];       // el detalle desaparece al cerrar (solo queda el resumen)
     registrosMov = [];
     saldoInicialBanco = 0;  // Banco en Vivo se reinicia para la proxima caja
+    saldoInicialOrigen = null;
     movimientosBanco = [];
     fotoSaldoBanco = null; actualizarEstadoFotoSaldo();
     renderBancoEnVivo();
@@ -1049,6 +1091,7 @@ document.getElementById('btnCambiarModo4').addEventListener('click', volverASele
 
 // ── Banco en Vivo: saldo inicial + movimientos, solo visual (NO alimenta ningun Excel oficial) ──
 let saldoInicialBanco = 0;
+let saldoInicialOrigen = null; // {numero, monto}: cierre de la caja anterior del que se tomo el saldo inicial
 let movimientosBanco = []; // {fecha, tipo:'ingreso'|'egreso', descripcion, monto}
 // efectivoData se mantiene solo para no romper la firma de la funcion del Arqueo (siempre en cero: no se maneja efectivo)
 const efectivoData = {
@@ -1063,7 +1106,33 @@ function calcularSaldoActualBanco(){
   return saldoInicialBanco + ingresos - egresos;
 }
 
+// Nota bajo el saldo inicial: de que cierre salio y si lo corregiste (el BCP manda)
+function actualizarNotaSaldoInicial(){
+  const el = document.getElementById('saldoInicialNota'); if(!el) return;
+  if(!saldoInicialOrigen || !cajaActiva){ el.style.display = 'none'; el.textContent = ''; return; }
+  const dif = Math.round((saldoInicialBanco - saldoInicialOrigen.monto) * 100) / 100;
+  el.style.display = 'block';
+  if(Math.abs(dif) < 0.005){
+    el.style.color = '#1b7a3a';
+    el.textContent = '\u2714 Tomado del cierre de la caja ' + saldoInicialOrigen.numero + ' (S/ ' + saldoInicialOrigen.monto.toFixed(2) + '). Verifica que coincida con el saldo del BCP.';
+  } else {
+    el.style.color = '#b45309';
+    el.textContent = '\u26A0 Difiere en S/ ' + Math.abs(dif).toFixed(2) + ' del cierre de la caja ' + saldoInicialOrigen.numero + ' (S/ ' + saldoInicialOrigen.monto.toFixed(2) + '). \u00bfITF, comisiones o un dep\u00f3sito entre el cierre y la apertura?';
+  }
+}
+
+// Diferencia del Arqueo tal como la muestra "Ver Arqueo" (Fondo - (Banco + Comprobantes + Vales + Pendientes))
+function diferenciaArqueoActual(){
+  const totalComprobantes = registros.reduce((s,r)=> s + ((r.tipo==='Vale Provisional' && r.liquidado) ? 0 : r.total), 0);
+  const totalVales = registrosMov.reduce((s,r)=>s+r.total,0);
+  const totalPendientes = cajasCerradas.reduce((s,c)=>s+c.monto,0);
+  return Math.round((fondoFijoActivo - (calcularSaldoActualBanco() + totalComprobantes + totalVales + totalPendientes)) * 100) / 100;
+}
+
 function renderBancoEnVivo(){
+  const inpSaldoInicial = document.getElementById('bancoSaldoInicial');
+  if(inpSaldoInicial && document.activeElement !== inpSaldoInicial) inpSaldoInicial.value = saldoInicialBanco ? saldoInicialBanco.toFixed(2) : '';
+  actualizarNotaSaldoInicial();
   document.getElementById('bancoSaldoActual').textContent = 'S/ ' + calcularSaldoActualBanco().toFixed(2);
   const lista = document.getElementById('listaMovimientosBanco');
   const totalesCont = document.getElementById('totalesMovimientosBanco');
@@ -3194,6 +3263,7 @@ async function restaurarCajaDesdeSupabase(){
       fotoSaldoBanco = c.foto_saldo_url ? { dataUrl: c.foto_saldo_url } : null;
       actualizarEstadoFotoSaldo();
       saldoInicialBanco = parseFloat(c.saldo_inicial_banco)||0;
+      saldoInicialOrigen = c.saldo_inicial_origen ? { numero: String(c.saldo_inicial_origen), monto: parseFloat(c.saldo_inicial_sugerido)||0 } : null;
       const fCajaInput = document.getElementById('fCaja');
       if(fCajaInput) fCajaInput.value = cajaActiva;
       actualizarBadgeCaja();
