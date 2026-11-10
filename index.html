@@ -194,7 +194,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
         <button id="btnPapelera" class="secondary" style="padding:6px 12px; font-size:11px;">&#128465; Eliminados</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.70</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.71</div>
     </div>
   </header>
 
@@ -821,9 +821,7 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async
       const pre = await prellenarSaldoInicial(cajaIdActual, cajaTipoActiva);
       if(pre){
         renderBancoEnVivo();
-        if(Math.abs(parseFloat(pre.diferenciaCierre)||0) >= 0.005){
-          alert('La caja ' + pre.numero + ' cerr\u00f3 con una diferencia de Arqueo de S/ ' + parseFloat(pre.diferenciaCierre).toFixed(2) + '.\n\nEsta caja nueva hereda ese descuadre: rev\u00edsalo antes de enviar su Arqueo.');
-        }
+        avisarDescuadreHeredado(pre);
       }
     } catch(e3){
       console.warn('No se pudo calcular el saldo inicial automatico:', e3.message);
@@ -841,6 +839,12 @@ document.getElementById('btnConfirmarAbrirCaja').addEventListener('click', async
   }
   await verificarCajasAbiertas();
 });
+
+function avisarDescuadreHeredado(pre){
+  if(pre && Math.abs(parseFloat(pre.diferenciaCierre)||0) >= 0.005){
+    alert('La caja ' + pre.numero + ' cerr\u00f3 con una diferencia de Arqueo de S/ ' + parseFloat(pre.diferenciaCierre).toFixed(2) + '.\n\nEsta caja nueva hereda ese descuadre: rev\u00edsalo antes de enviar su Arqueo.');
+  }
+}
 
 // Toma el saldo final de la ultima caja cerrada del mismo tipo y lo deja como saldo inicial de la caja nueva.
 // Si esa caja es antigua y no guardo su saldo final, se calcula desde sus movimientos de banco.
@@ -3264,6 +3268,14 @@ async function restaurarCajaDesdeSupabase(){
       actualizarEstadoFotoSaldo();
       saldoInicialBanco = parseFloat(c.saldo_inicial_banco)||0;
       saldoInicialOrigen = c.saldo_inicial_origen ? { numero: String(c.saldo_inicial_origen), monto: parseFloat(c.saldo_inicial_sugerido)||0 } : null;
+      // Saldo inicial vacio y sin origen (caja abierta antes de esta funcion, o sin teclear): se llena solo con el cierre de la caja anterior.
+      // Una sola vez: al quedar con origen ya no se vuelve a tocar, aunque luego lo corrijas o lo pongas en 0.
+      if(saldoInicialBanco === 0 && !saldoInicialOrigen){
+        try{
+          const pre = await prellenarSaldoInicial(c.id, cajaTipoActiva);
+          if(pre) avisarDescuadreHeredado(pre);
+        } catch(e4){ console.warn('No se pudo llenar el saldo inicial automatico:', e4.message); }
+      }
       const fCajaInput = document.getElementById('fCaja');
       if(fCajaInput) fCajaInput.value = cajaActiva;
       actualizarBadgeCaja();
