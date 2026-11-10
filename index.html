@@ -194,7 +194,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
         <button id="btnPapelera" class="secondary" style="padding:6px 12px; font-size:11px;">&#128465; Eliminados</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.68</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.69</div>
     </div>
   </header>
 
@@ -2013,27 +2013,34 @@ async function restaurarDePapelera(i){
       const { error } = await supabaseClient.from('firmas_personas').upsert(reg);
       if(error) throw error;
     } else {
-      // si su caja ya esta cerrada, avisar: se restaura ahi, pero el monto de cierre ya enviado no cambia
-      let enCajaCerrada = false;
+      // Si su caja ya esta cerrada y hay una caja abierta del mismo tipo, se restaura en la ABIERTA (en una caja cerrada
+      // no sirve: ya se envio). Si no hay caja abierta, se restaura en la cerrada, avisando que su monto de cierre no cambia.
+      let fila = { ...reg };
+      let destinoEsAbierta = false;
       if(reg.caja_id){
-        const { data: cj } = await supabaseClient.from('cajas').select('numero,estado').eq('id', reg.caja_id).single();
+        const { data: cj } = await supabaseClient.from('cajas').select('numero,estado,tipo').eq('id', reg.caja_id).single();
         if(cj && cj.estado === 'cerrada'){
-          enCajaCerrada = true;
-          if(!confirm('Este registro pertenec\u00eda a la caja ' + cj.numero + ', que ya est\u00e1 cerrada.\n\nSe restaurar\u00e1 en esa caja, pero su monto de cierre ya enviado no cambia.\n\n\u00bfRestaurar de todas formas?')) return;
+          if(cajaIdActual && cj.tipo === cajaTipoActiva){
+            if(!confirm('Este registro pertenec\u00eda a la caja ' + cj.numero + ', que ya est\u00e1 cerrada.\n\nSe restaurar\u00e1 en la caja abierta (' + cajaActiva + ') para que cuente ah\u00ed.\n\n\u00bfContinuar?')) return;
+            fila.caja_id = cajaIdActual;
+            if(!fila.origen_caja_numero) fila.origen_caja_numero = String(cj.numero);
+            destinoEsAbierta = true;
+          } else if(!confirm('Este registro pertenec\u00eda a la caja ' + cj.numero + ', que ya est\u00e1 cerrada.\n\nSe restaurar\u00e1 en esa caja, pero su monto de cierre ya enviado no cambia.\n\n\u00bfRestaurar de todas formas?')) return;
         }
       }
       const { data: ya, error: eY } = await supabaseClient.from(it.tabla).select('id').eq('id', reg.id);
       if(eY) throw eY;
       if(!ya || ya.length === 0){
-        const { error } = await supabaseClient.from(it.tabla).insert(reg);
+        const { error } = await supabaseClient.from(it.tabla).insert(fila);
         if(error) throw error;
       }
+      it.__destino = fila.caja_id;
     }
     const { error: eM } = await supabaseClient.from('papelera').update({ restaurado_en: new Date().toISOString() }).eq('id', it.id);
     if(eM) throw eM;
     // refrescar lo que se ve en la app
     if(it.tabla === 'firmas_personas'){ await cargarFirmasPermanentes(); if(typeof renderPersonasAdmin === 'function') renderPersonasAdmin(); }
-    else if(reg.caja_id && reg.caja_id === cajaIdActual){ await restaurarCajaDesdeSupabase(); }
+    else if(it.__destino && it.__destino === cajaIdActual){ await restaurarCajaDesdeSupabase(); }
     await abrirPapelera();
   } catch(e){
     alert('No se pudo restaurar: ' + e.message + '\n\nPuedes volver a intentarlo; no se duplica nada.');
