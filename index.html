@@ -194,7 +194,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
         <button id="btnPapelera" class="secondary" style="padding:6px 12px; font-size:11px;">&#128465; Eliminados</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.71</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.72</div>
     </div>
   </header>
 
@@ -3732,8 +3732,14 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
   const bHc = 'border:1px solid #000; font-family:Arial; font-size:11px; padding:2px 6px; font-weight:bold; background:#f2f2f2; text-align:center;';
   const bSec = 'font-family:Arial; font-size:11px; font-weight:bold; padding:3px 6px; border:1px solid #000; background:#fff;';
 
-  const filaComprobantes = registros.filter(r=>!(r.tipo==='Vale Provisional' && r.liquidado)).map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bFc}">${r.documento||''}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
-  const filaVales = registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">${autorizanteActual}</td></tr>`).join('');
+  // Los vales provisionales SIEMPRE van en la Seccion 3 (no son comprobantes de pago); los ya liquidados no aparecen
+  const comprobantesSec2 = registros.filter(r=> r.tipo!=='Vale Provisional');
+  const provisionalesSec3 = registros.filter(r=> r.tipo==='Vale Provisional' && !r.liquidado);
+  const totalSec2 = comprobantesSec2.reduce((s,r)=>s+r.total,0);
+  const totalSec3 = provisionalesSec3.reduce((s,r)=>s+r.total,0) + totalVales;
+  const filaComprobantes = comprobantesSec2.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.descripcion}</td><td style="${bFc}">${r.documento||''}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td></tr>`).join('');
+  const filaProvisionales = provisionalesSec3.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">${autorizanteActual}</td></tr>`).join('');
+  const filaVales = filaProvisionales + registrosMov.map(r=>`<tr><td style="${bF}">${r.fecha}</td><td style="${bF}">${r.solicitante}</td><td style="${bF}">${r.descripcion}</td><td style="${bFr}">S/ ${r.total.toFixed(2)}</td><td style="${bF}">${autorizanteActual}</td></tr>`).join('');
   const filaPendientes = cajasCerradas.map((c,i)=>`<tr><td style="${bF}">${c.fecha}</td><td style="${bF}">CAJA N&deg; ${c.numero}</td><td style="${bFr}">S/ ${c.monto.toFixed(2)}</td><td style="${bFc}"><button type="button" style="padding:4px 8px; font-size:10px; background:var(--ok); color:#fff; border:none; border-radius:3px; cursor:pointer;" onclick="registrarReembolso(${i})">&#9989; Registrar reembolso</button></td></tr>`).join('');
 
   const denominaciones = [200,100,50,20,10];
@@ -3779,14 +3785,14 @@ document.getElementById('btnVerArqueo').addEventListener('click', ()=>{
       <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
         <tr><td style="${bH}">Fecha</td><td style="${bH}">Concepto</td><td style="${bHc}">Nro. Doc.</td><td style="${bH}text-align:right;">Importe</td></tr>
         ${filaComprobantes || `<tr><td colspan="4" style="${bFc}">Sin comprobantes</td></tr>`}
-        <tr><td colspan="3" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalComprobantes.toFixed(2)}</td></tr>
+        <tr><td colspan="3" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalSec2.toFixed(2)}</td></tr>
       </table>
 
       <div style="${bSec}">3.- VALES PROVISIONALES</div>
       <table style="border-collapse:collapse; width:100%; margin-bottom:10px;">
         <tr><td style="${bH}">Fecha</td><td style="${bH}">Beneficiario</td><td style="${bH}">Motivo</td><td style="${bH}text-align:right;">Importe</td><td style="${bH}">Autorizante</td></tr>
         ${filaVales || `<tr><td colspan="5" style="${bFc}">Sin vales</td></tr>`}
-        <tr><td colspan="3" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalVales.toFixed(2)}</td><td style="${bF}"></td></tr>
+        <tr><td colspan="3" style="${bH}text-align:right;">TOTAL</td><td style="${bFr}font-weight:bold;">S/. ${totalSec3.toFixed(2)}</td><td style="${bF}"></td></tr>
       </table>
 
       <div style="${bSec}">4.- CAJAS CHICAS PENDIENTES DE REPOSICION</div>
