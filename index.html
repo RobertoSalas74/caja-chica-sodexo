@@ -194,7 +194,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button id="btnHistorialCajas" class="secondary" style="padding:6px 12px; font-size:11px;">&#128194; Historial</button>
         <button id="btnPapelera" class="secondary" style="padding:6px 12px; font-size:11px;">&#128465; Eliminados</button>
       </div>
-      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.72</div>
+      <div style="font-family: var(--mono); font-size:12px; font-weight:bold; color:var(--accent); letter-spacing:.05em; background:var(--accent-soft); padding:2px 8px; border-radius:2px;">VERSI&Oacute;N 4.73</div>
     </div>
   </header>
 
@@ -1510,6 +1510,11 @@ function editarRegistro(modo, i){
           <option value="">&mdash; Selecciona &mdash;</option>
           ${SERVICE_CATS.map(sc=>`<option ${sc===r.serviceCat?'selected':''}>${sc}</option>`).join('')}
         </select></div>
+        <div style="${bC}background:var(--accent-soft); border:1px solid var(--accent); border-radius:4px; padding:10px;">
+          <label>${r.evidencia?'Reemplazar':'Adjuntar'} foto del documento</label><br>
+          <input type="file" id="editArchivoFactura" accept="image/*,application/pdf" style="margin-top:6px;">
+          ${r.evidencia ? '<div style="font-size:11px; color:var(--ok); margin-top:4px;">Ya tiene una foto adjunta &mdash; elige un archivo solo si quieres reemplazarla.</div>' : ''}
+        </div>
         <button id="btnGuardarEdicion" style="width:100%; padding:10px; margin-top:6px;">Guardar cambios</button>
         <div id="editEstado" style="font-size:12px; margin-top:8px; text-align:center;"></div>
       </div>`;
@@ -1619,11 +1624,21 @@ function editarRegistro(modo, i){
         r.serviceCat = document.getElementById('editServiceCat').value;
         r.total = r.cantidad * r.precio;
         r.sinIgv = r.total/1.18;
+        const updFactura = {
+          fecha: r.fecha, solicitante: r.solicitante, documento: r.documento, descripcion: r.descripcion, detalle: r.detalle,
+          precio: r.precio, importe: r.total, tipo: r.tipo, cuenta: r.cuenta, service_cat: r.serviceCat
+        };
+        const archivoFactura = document.getElementById('editArchivoFactura').files[0];
+        if(archivoFactura){
+          estado.textContent = 'Subiendo foto...';
+          const nuevaEv = { dataUrl: await new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.onerror=rej; rd.readAsDataURL(archivoFactura); }), tipo: archivoFactura.type };
+          const urlF = await subirEvidenciaAStorage(nuevaEv, 'facturas');
+          if(!urlF) throw new Error('No se pudo subir la foto');
+          r.evidencia = nuevaEv; updFactura.evidencia_url = urlF;
+        }
+        estado.textContent = 'Guardando...';
         if(r.id){
-          const { error } = await supabaseClient.from('comprobantes').update({
-            fecha: r.fecha, solicitante: r.solicitante, documento: r.documento, descripcion: r.descripcion, detalle: r.detalle,
-            precio: r.precio, importe: r.total, tipo: r.tipo, cuenta: r.cuenta, service_cat: r.serviceCat
-          }).eq('id', r.id);
+          const { error } = await supabaseClient.from('comprobantes').update(updFactura).eq('id', r.id);
           if(error) throw error;
         }
       } else {
